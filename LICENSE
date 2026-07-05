@@ -1,0 +1,10 @@
+Copyright © 2026 Andrew Miller. All rights reserved.
+
+This repository is published as a portfolio: you are welcome to read the
+code, but no permission is granted to use, copy, modify, or redistribute
+it, in whole or in part. All site content (text, résumé, design) is
+likewise reserved.
+
+Third-party material is not covered by this notice and remains under its
+own terms: project scaffolding derives from leptos-rs/start-axum-workspace
+(MIT); dependencies are licensed per their respective crates.
