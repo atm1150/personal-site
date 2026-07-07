@@ -27,6 +27,12 @@ tower = { version = "0.5.2", features = ["full"] }
 tower-http = { version = "0.7.0", features = ["full"] }
 wasm-bindgen = "0.2.106"
 
+# Contract consumed by the Aspire AppHost (Portfolio.Orchestrator): the readiness
+# path it health-checks. site/server registers this route and pins it to this value
+# with a test, so the two sides cannot drift silently.
+[workspace.metadata.orchestrator]
+ready-path = "/readyz"
+
 # See https://github.com/leptos-rs/cargo-leptos for documentation of all the parameters.
 
 # A leptos project defines which workspace members

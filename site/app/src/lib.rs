@@ -13,8 +13,11 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
             <head>
                 <meta charset="utf-8"/>
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-                // TODO Should ensure the below AutoReload is not included in prod builds but that can be fixed later
-                <AutoReload options=options.clone()/>
+                // AutoReload emits its hot-reload script only when the LEPTOS_WATCH
+                // env var is set at runtime (cargo leptos watch sets it). disable_watch
+                // in release builds is belt-and-suspenders: even a stray LEPTOS_WATCH in
+                // a production environment cannot re-enable the reload script.
+                <AutoReload options=options.clone() disable_watch=!cfg!(debug_assertions)/>
                 <HydrationScripts options/>
                 <MetaTags/>
             </head>
