@@ -1,0 +1,10 @@
+{
+  "recommendations": [
+    "rust-lang.rust-analyzer",
+    "tamasfe.even-better-toml",
+    "fill-labs.dependi",
+    "ms-dotnettools.csdevkit",
+    "microsoft-aspire.aspire-vscode",
+    "editorconfig.editorconfig"
+  ]
+}
