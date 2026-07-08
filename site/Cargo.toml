@@ -2,11 +2,14 @@
 resolver = "2"
 members = ["app", "frontend", "server"]
 
-# need to be applied only to wasm build
-[profile.release]
-codegen-units = 1
-lto = true
+# Size-tuned profile for the wasm/lib build only. cargo-leptos builds the lib
+# under this profile via lib-profile-release below; the SSR server binary stays
+# on Cargo release defaults (opt-level 3, no LTO). See the leptos docs.
+[profile.wasm-release]
+inherits = "release"
 opt-level = 'z'
+lto = true
+codegen-units = 1
 
 [workspace.dependencies]
 leptos = { version = "0.8.2" }
@@ -98,3 +101,7 @@ lib-features = []
 #
 # Optional. Defaults to false.
 lib-default-features = false
+
+# The cargo profile used for the lib (wasm) release build. Points at the
+# size-tuned profile above so the server binary keeps Cargo release defaults.
+lib-profile-release = "wasm-release"
