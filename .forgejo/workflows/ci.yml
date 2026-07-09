@@ -1,0 +1,76 @@
+name: CI
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# One live run per branch; a newer push cancels the superseded run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    runs-on: ci
+    timeout-minutes: 60
+    container:
+      # Pinned so new stable releases (with new clippy lints) can't turn CI
+      # red on their own; bump deliberately alongside the local toolchain.
+      image: rust:1.96-bookworm
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Install Node 22 (JS actions need node inside the container)
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+          apt-get install -y --no-install-recommends nodejs
+      - uses: actions/checkout@v4
+      - name: Install toolchain components
+        run: |
+          rustup component add rustfmt clippy
+          rustup target add wasm32-unknown-unknown
+      - name: Install cargo-leptos
+        run: |
+          curl -L --proto '=https' --tlsv1.2 -sSf \
+            https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+          cargo binstall -y --locked cargo-leptos@0.3.6
+      - name: rustfmt
+        working-directory: site
+        run: cargo fmt --all --check
+      - name: clippy (hydrate world)
+        working-directory: site
+        run: cargo clippy -p frontend --all-targets -- -D warnings
+      - name: clippy (ssr world)
+        working-directory: site
+        run: cargo clippy -p server --all-targets -- -D warnings
+      - name: test
+        working-directory: site
+        run: cargo leptos test
+      - name: build (release, proves the deployable wasm + server pair compiles)
+        working-directory: site
+        run: cargo leptos build --release
+
+  dotnet:
+    runs-on: ci
+    timeout-minutes: 20
+    container:
+      image: mcr.microsoft.com/dotnet/sdk:10.0
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_NOLOGO: "1"
+    steps:
+      - name: Install Node 22 (JS actions need node inside the container)
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends curl
+          curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+          apt-get install -y --no-install-recommends nodejs
+      - uses: actions/checkout@v4
+      - name: format (AppHost)
+        run: dotnet format Portfolio.Orchestrator/Portfolio.Orchestrator.csproj --verify-no-changes
+      - name: format (Tests)
+        run: dotnet format Portfolio.Orchestrator.Tests/Portfolio.Orchestrator.Tests.csproj --verify-no-changes
+      - name: build (warnaserror)
+        run: dotnet build Portfolio.Orchestrator.Tests/Portfolio.Orchestrator.Tests.csproj -warnaserror
+      - name: test
+        run: dotnet test Portfolio.Orchestrator.Tests/Portfolio.Orchestrator.Tests.csproj --no-build
