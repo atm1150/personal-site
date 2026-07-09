@@ -9,12 +9,28 @@ leptos = { workspace = true, features = ["ssr"] }
 leptos_axum.workspace = true
 
 axum.workspace = true
-simple_logger.workspace = true
 tokio.workspace = true
 tower.workspace = true
 tower-http.workspace = true
-log.workspace = true
+thiserror.workspace = true
+
+# OpenTelemetry: OTLP/gRPC export of traces + logs to the Aspire dashboard. The
+# opentelemetry crates are tightly version-coupled; keep them on one major line and
+# pair tracing-opentelemetry with the matching opentelemetry release (0.33 -> 0.32).
+opentelemetry = { version = "0.32", features = ["trace", "logs"] }
+opentelemetry_sdk = { version = "0.32", features = ["trace", "logs"] }
+opentelemetry-otlp = { version = "0.32", default-features = false, features = ["grpc-tonic", "trace", "logs"] }
+opentelemetry-appender-tracing = "0.32"
+# semconv_experimental: service.instance.id and deployment.environment.name are not
+# yet stable conventions, so their constants sit behind this feature.
+opentelemetry-semantic-conventions = { version = "0.32", features = ["semconv_experimental"] }
+tracing-opentelemetry = "0.33"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "registry"] }
+uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
 # Used by the test that pins the /readyz route to the workspace metadata.
 toml = "0.9"
+# `testing` adds the in-memory span/log exporters the guard tests flush into.
+opentelemetry_sdk = { version = "0.32", features = ["testing"] }
