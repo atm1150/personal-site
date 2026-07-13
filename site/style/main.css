@@ -31,6 +31,15 @@ body {
 h1 { font-size: 2em; font-weight: bold; margin: 0.67em 0; }
 p { margin: 1em 0; }
 
+/* ---- Error / not-found page ----
+   Scoped root class fed by ErrorTemplate (Routes fallback synthesizes a 404).
+   Inherits the theme via ThemeProvider; centered by the body default above. */
+.not-found-page {
+  max-width: 36rem;
+  margin: 4rem auto;
+  padding: 0 1.5rem;
+}
+
 /* ---- Resume page (/resume) ----
    Scoped under .resume-page so the rules live in the single site bundle
    without leaking into other pages. The @media print block at the bottom

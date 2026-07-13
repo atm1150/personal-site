@@ -1,3 +1,5 @@
+pub mod error_template;
+pub mod errors;
 pub mod resume;
 
 use leptos::prelude::*;
@@ -48,8 +50,11 @@ pub fn App() -> impl IntoView {
         <ThemeProvider>
             <Router>
                 <main>
-                    // TODO Need a fallback page eventually
-                    <Routes fallback=|| "Page not found.".into_view()>
+                    <Routes fallback=|| {
+                        let mut errors = Errors::default();
+                        errors.insert_with_default_key(crate::errors::AppError::NotFound);
+                        view! { <error_template::ErrorTemplate errors/> }.into_view()
+                    }>
                         <Route path=StaticSegment("") view=HomePage/>
                         <Route path=StaticSegment("resume") view=ResumePage/>
                     </Routes>
