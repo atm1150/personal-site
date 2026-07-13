@@ -1,5 +1,216 @@
+/* Self-hosted font (SIL OFL 1.1; license alongside the files in
+   public/fonts/). Leading the resume's font stack with a bundled font makes
+   rendering deterministic on every machine */
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/InterVariable.woff2") format("woff2");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/InterVariable-Italic.woff2") format("woff2");
+  font-weight: 100 800;
+  font-style: italic;
+  font-display: swap;
+}
+
 /* Placeholder css */
 body {
+    margin: 0;
     font-family: sans-serif;
     text-align: center;
+}
+
+/* singlestage's <ThemeProvider> injects a stylesheet that includes Tailwind
+   preflight, a global reset (margins/padding zeroed, headings unsized, list
+   bullets stripped). It lives in a cascade @layer, so these unlayered rules
+   win wherever both apply - but pages relying on browser defaults need them
+   restored explicitly. */
+h1 { font-size: 2em; font-weight: bold; margin: 0.67em 0; }
+p { margin: 1em 0; }
+
+/* ---- Resume page (/resume) ----
+   Scoped under .resume-page so the rules live in the single site bundle
+   without leaking into other pages. The @media print block at the bottom
+   is what shapes the downloadable PDF: it is produced by manually printing
+   this page to PDF in Firefox and replacing public/Andrew-Miller-Resume.pdf. */
+
+.resume-page {
+  --navy: #16243f;       /* masthead background */
+  --accent: #2563eb;     /* section rules, links */
+  --ink: #232730;        /* body text */
+  --muted: #5b6470;      /* dates, sub-lines */
+  --light: #d6e0f0;      /* contact text on navy */
+  --role: #9db8e0;       /* role line on navy */
+
+  color: var(--ink);
+  font-family: "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.42;
+  text-align: left;
+  -webkit-text-size-adjust: 100%;
+}
+
+.resume-page * { box-sizing: border-box; }
+
+/* Three layers: the themed body background, the Card as a theme-aware frame
+   (its bg-card/border/rounded-xl/shadow tokens kept - dark in dark mode), and
+   inside it the resume sheet (.page) - a document, so paper-white and
+   ink-colored in ANY theme. */
+.resume-page .resume-card {
+  max-width: calc(8.5in + 48px);
+  margin: 32px auto;
+  padding: 24px;
+  gap: 0;
+}
+
+.resume-page .page {
+  max-width: 8.5in;
+  margin: 0 auto;
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.16);
+}
+
+/* ---- Download button (screen only) ----
+   First child of the card frame: flex-end aligns it to the card's right
+   edge, sticky keeps it visible while the card scrolls */
+.resume-page .no-print {
+  position: sticky;
+  top: 16px;
+  align-self: flex-end;
+  margin-bottom: 16px;
+  z-index: 10;
+  padding: 8px 16px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+.resume-page .no-print:hover { background: #1d4ed8; }
+
+/* ---- Masthead ---- */
+.resume-page .masthead {
+  background: var(--navy);
+  color: #fff;
+  padding: 26px 40px 22px;
+}
+.resume-page .masthead h1 {
+  margin: 0;
+  font-size: 27pt;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+.resume-page .role {
+  margin: 5px 0 12px;
+  font-size: 11.5pt;
+  font-weight: 500;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--role);
+}
+.resume-page .contact {
+  margin: 0;
+  font-size: 9.5pt;
+  color: var(--light);
+}
+.resume-page .contact a { color: var(--light); text-decoration: none; }
+.resume-page .contact .sep { color: #5e7197; margin: 0 6px; }
+
+/* ---- Body (was <main> on the standalone page) ---- */
+.resume-page .resume-body { padding: 20px 40px 34px; }
+
+.resume-page section { margin-bottom: 16px; }
+
+.resume-page h2 {
+  margin: 0 0 9px;
+  font-size: 11pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.6px;
+  color: var(--navy);
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 3px;
+}
+
+.resume-page #summary p { margin: 0; }
+
+/* ---- Skills ---- */
+.resume-page .skills { margin: 0; }
+.resume-page .skill-row { display: flex; gap: 12px; margin-bottom: 4px; }
+.resume-page .skill-row dt { flex: 0 0 132px; font-weight: 600; color: var(--navy); }
+.resume-page .skill-row dd { margin: 0; flex: 1; }
+
+/* ---- Experience / Projects ---- */
+.resume-page .job, .resume-page .project { margin-bottom: 13px; }
+.resume-page .job:last-child, .resume-page .project:last-child { margin-bottom: 0; }
+
+.resume-page .job-head { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; }
+.resume-page .job-head h3, .resume-page .project h3 { margin: 0; font-size: 11pt; font-weight: 700; }
+.resume-page .job-title { font-weight: 500; color: #3c424d; }
+.resume-page .job-sub { margin: 2px 0 6px; font-size: 9.8pt; font-style: italic; color: var(--muted); }
+
+.resume-page .dates { font-size: 9.5pt; color: var(--muted); white-space: nowrap; }
+
+.resume-page ul { margin: 5px 0 0; padding-left: 18px; list-style: disc; }
+.resume-page li { margin-bottom: 3px; }
+
+.resume-page .project p { margin: 3px 0 0; }
+.resume-page .proj-tag { font-weight: 500; color: var(--accent); font-size: 10pt; }
+.resume-page .stack { font-size: 9pt; color: var(--muted); letter-spacing: 0.2px; }
+
+/* ---- Education ---- */
+.resume-page .edu-row { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; margin-bottom: 4px; }
+.resume-page .edu-name { font-weight: 600; color: var(--navy); }
+.resume-page .edu-detail { font-weight: 400; color: #3c424d; }
+
+/* ---- Print / PDF ---- */
+@media print {
+  /* @page cannot be scoped to a selector; these only take effect when
+     printing, and print fidelity of pages other than the resume is a
+     non-goal. */
+  @page { size: Letter; margin: 0.35in 0; }
+  @page :first { margin-top: 0; }
+  html, body {
+    background: #fff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .resume-page { background: #fff; font-size: 10pt; line-height: 1.38; }
+
+  .resume-page .resume-card { max-width: none; margin: 0; padding: 0; background: #fff; border: none; border-radius: 0; box-shadow: none; }
+  .resume-page .page { max-width: none; margin: 0; box-shadow: none; }
+
+  /* The download control is a screen affordance; never print it. */
+  .resume-page .no-print { display: none; }
+
+  .resume-page .masthead { padding: 20px 40px 17px; }
+  .resume-page .masthead h1 { font-size: 24pt; line-height: 1.1; }
+  .resume-page .role { font-size: 11pt; margin: 4px 0 10px; }
+
+  .resume-page .resume-body { padding: 18px 40px 0; }
+  .resume-page section { margin-bottom: 14px; }
+  .resume-page h2 { font-size: 11pt; margin-bottom: 7px; break-after: avoid; }
+
+  .resume-page .skill-row { margin-bottom: 3px; }
+  .resume-page .job { margin-bottom: 12px; }
+  .resume-page .job-sub { margin: 2px 0 5px; }
+  .resume-page ul { margin-top: 4px; }
+  .resume-page li { margin-bottom: 3px; }
+
+  .resume-page .edu-row { margin-bottom: 3px; }
+
+  /* Allow a long job to split across pages, but never split a bullet,
+     a skills row, or an education row. Small jobs (everything after the
+     first) and the education section stay whole on one page. */
+  .resume-page li, .resume-page .skill-row, .resume-page .edu-row, .resume-page .project { break-inside: avoid; }
+  .resume-page .job:not(:first-of-type), .resume-page #education { break-inside: avoid; }
+  .resume-page a { color: var(--accent); }
 }

@@ -1,9 +1,13 @@
+pub mod resume;
+
 use leptos::prelude::*;
 use leptos_meta::{MetaTags, Stylesheet, Title, provide_meta_context};
 use leptos_router::{
     StaticSegment,
     components::{Route, Router, Routes},
 };
+use resume::ResumePage;
+use singlestage::ThemeProvider;
 
 /// This shell function is used to generate the placeholder html that provides the base index.html
 pub fn shell(options: LeptosOptions) -> impl IntoView {
@@ -38,25 +42,27 @@ pub fn App() -> impl IntoView {
 
         <Title text="atmil — portfolio"/>
 
-        <Router>
-            <main>
-                // TODO Need a fallback page eventually
-                <Routes fallback=|| "Page not found.".into_view()>
-                    <Route path=StaticSegment("") view=HomePage/>
-                </Routes>
-            </main>
-        </Router>
+        // ThemeProvider is load-bearing beyond theming: it injects singlestage's
+        // compiled component CSS (a <style> tag) into the page. Components render
+        // unstyled without it.
+        <ThemeProvider>
+            <Router>
+                <main>
+                    // TODO Need a fallback page eventually
+                    <Routes fallback=|| "Page not found.".into_view()>
+                        <Route path=StaticSegment("") view=HomePage/>
+                        <Route path=StaticSegment("resume") view=ResumePage/>
+                    </Routes>
+                </main>
+            </Router>
+        </ThemeProvider>
     }
 }
 
 #[component]
 fn HomePage() -> impl IntoView {
-    let count = RwSignal::new(0);
-    let on_click = move |_| *count.write() += 1;
-
     view! {
         <h1>"Portfolio"</h1>
-        <p>"Placeholder page: server-rendered by Leptos + Axum, hydrated by WebAssembly."</p>
-        <button on:click=on_click>"Hydration check: " {count}</button>
+        <p><a href="/resume">"Résumé"</a></p>
     }
 }

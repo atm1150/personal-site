@@ -45,7 +45,9 @@ pub fn router(leptos_options: LeptosOptions) -> Router {
         .with_state(leptos_options)
         .layer(telemetry::trace_layer());
 
-    Router::new().route(READYZ_PATH, get(readyz)).merge(traced)
+    Router::new()
+        .route(READYZ_PATH, get(readyz))
+        .merge(traced)
 }
 
 #[cfg(test)]
