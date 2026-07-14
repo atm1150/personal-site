@@ -1,3 +1,4 @@
+pub mod csp;
 pub mod error_template;
 pub mod errors;
 pub mod resume;
@@ -38,6 +39,11 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
 pub fn App() -> impl IntoView {
     // Provides context that manages stylesheets, titles, meta tags, etc.
     provide_meta_context();
+
+    // Emit the CSP header on every document response (home, resume, and the
+    // fallback error page all render inside App). SSR only; no-op on the client.
+    #[cfg(feature = "ssr")]
+    crate::csp::set_csp_header();
 
     view! {
         <Stylesheet id="leptos" href="/pkg/portfolio.css"/>

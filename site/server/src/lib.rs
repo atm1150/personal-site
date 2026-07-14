@@ -5,6 +5,7 @@
 //! porting to a different runtime only needs a new `main` (or a new main/lib pair) —
 //! the app's shape is defined once, here.
 
+pub mod security;
 pub mod telemetry;
 
 pub use telemetry::{TelemetryConfig, TelemetryError, TelemetryGuard};
@@ -12,6 +13,7 @@ pub use telemetry::{TelemetryConfig, TelemetryError, TelemetryGuard};
 use app::*;
 use axum::Router;
 use axum::http::StatusCode;
+use axum::middleware::from_fn;
 use axum::routing::get;
 use leptos::prelude::*;
 use leptos_axum::{LeptosRoutes, generate_route_list};
@@ -45,7 +47,13 @@ pub fn router(leptos_options: LeptosOptions) -> Router {
         .with_state(leptos_options)
         .layer(telemetry::trace_layer());
 
-    Router::new().route(READYZ_PATH, get(readyz)).merge(traced)
+    // The constant security headers wrap the whole router (outermost layer,
+    // added last), so every response carries them: SSR pages, static assets,
+    // and /readyz. The per-request CSP is set separately during SSR render.
+    Router::new()
+        .route(READYZ_PATH, get(readyz))
+        .merge(traced)
+        .layer(from_fn(security::set_security_headers))
 }
 
 #[cfg(test)]

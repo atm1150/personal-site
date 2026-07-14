@@ -44,6 +44,11 @@ jobs:
       - name: clippy (ssr world)
         working-directory: site
         run: cargo clippy -p server --all-targets -- -D warnings
+      - name: test (app crate)
+        working-directory: site
+        # cargo leptos test only drives the server + frontend packages; the shared
+        # app lib's own unit tests need an explicit run (ssr is its native world).
+        run: cargo test -p app --features ssr
       - name: test
         working-directory: site
         run: cargo leptos test
