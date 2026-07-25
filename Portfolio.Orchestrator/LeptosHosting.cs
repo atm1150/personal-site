@@ -26,7 +26,14 @@ public static class LeptosHostingExtensions
     // given; GetEndpoint later looks the endpoint up by that name. Naming it explicitly
     // in both places makes the coupling visible instead of relying on the default.
     private const string HttpEndpointName = "http";
+    private const string HttpsEndpointName = "https";
     private const string ReloadEndpointName = "reload";
+    private const string HealthEndpointName = "health";
+
+    /// <summary>Escape hatch: <c>SITE_TLS=off</c> in the AppHost's environment restores
+    /// the plain-http wiring (site served over http, readiness probed on the site
+    /// endpoint, no certificate or health-listener env injected).</summary>
+    private const string TlsSwitchEnvVar = "SITE_TLS";
 
     /// <summary>
     /// Adds a Leptos SSR server application to the distributed application, run via <c>cargo leptos watch</c>.
@@ -71,29 +78,75 @@ public static class LeptosHostingExtensions
             // error or a mid-build failure in the resource logs.
             RunToolchainPreflight(RunModePreflight);
 
+            // TLS is the run-mode default so the everyday stack proves the https code
+            // path; SITE_TLS=off restores the previous plain-http wiring (and with it
+            // hot reload from non-localhost clients, which mixed-content rules would
+            // otherwise block).
+            var serveTls = !string.Equals(
+                Environment.GetEnvironmentVariable(TlsSwitchEnvVar), "off", StringComparison.OrdinalIgnoreCase);
+
             resourceBuilder
                 .WithArgs(["leptos", "watch", .. args ?? []])
-                // Unproxied so the cargo-leptos process owns the port itself; the
-                // LEPTOS_SITE_ADDR override below binds it to all interfaces.
-                .WithHttpEndpoint(port: config.SitePort.Value, name: HttpEndpointName, isProxied: false)
-                .WithExternalHttpEndpoints()
                 // Declare the hot-reload websocket so Aspire's allocator accounts
                 // for the port. Dev-only, gated out of any published artifact.
                 .WithEndpoint(name: ReloadEndpointName, port: config.ReloadPort.Value, isProxied: false)
-                .WithHttpHealthCheck(readyPath.Value)
-                .WithOtlpExporter()
-                .WithEnvironment(context =>
+                .WithOtlpExporter();
+
+            if (serveTls)
+            {
+                // The certificate APIs are experimental (ASPIRECERTIFICATES001) and may
+                // change shape in a future Aspire release; this is a dev-only code path,
+                // so tracking that churn is acceptable.
+#pragma warning disable ASPIRECERTIFICATES001
+                resourceBuilder
+                    // Unproxied so the cargo-leptos process owns the port itself; the
+                    // LEPTOS_SITE_ADDR override below binds it to all interfaces.
+                    .WithHttpsEndpoint(port: config.SitePort.Value, name: HttpsEndpointName, isProxied: false)
+                    .WithExternalHttpEndpoints()
+                    // The auxiliary plain-http /readyz listener (HEALTH_ADDR below): the
+                    // probe goes there so it never has to trust the dev certificate.
+                    .WithHttpEndpoint(port: config.HealthPort.Value, name: HealthEndpointName, isProxied: false)
+                    .WithHttpHealthCheck(readyPath.Value, endpointName: HealthEndpointName)
+                    // The server terminates TLS itself, from PEM paths in env. Aspire
+                    // materializes the ASP.NET Core developer certificate as PEM files
+                    // and this callback maps their paths onto the server's env contract.
+                    .WithHttpsDeveloperCertificate()
+                    .WithHttpsCertificateConfiguration(ctx =>
+                    {
+                        ctx.EnvironmentVariables["TLS_CERT_PATH"] = ctx.CertificatePath;
+                        ctx.EnvironmentVariables["TLS_KEY_PATH"] = ctx.KeyPath;
+                        return Task.CompletedTask;
+                    });
+#pragma warning restore ASPIRECERTIFICATES001
+            }
+            else
+            {
+                resourceBuilder
+                    .WithHttpEndpoint(port: config.SitePort.Value, name: HttpEndpointName, isProxied: false)
+                    .WithExternalHttpEndpoints()
+                    .WithHttpHealthCheck(readyPath.Value);
+            }
+
+            resourceBuilder.WithEnvironment(context =>
+            {
+                // Sourcing the values from the declared endpoints (rather than the
+                // parsed config) keeps a single chain of truth: Cargo.toml -> endpoint
+                // annotation -> environment variable.
+                var site = resource.GetEndpoint(serveTls ? HttpsEndpointName : HttpEndpointName);
+                var reload = resource.GetEndpoint(ReloadEndpointName);
+                context.EnvironmentVariables["LEPTOS_SITE_ADDR"] =
+                    ReferenceExpression.Create($"0.0.0.0:{site.Property(EndpointProperty.Port)}");
+                context.EnvironmentVariables["LEPTOS_RELOAD_PORT"] =
+                    ReferenceExpression.Create($"{reload.Property(EndpointProperty.Port)}");
+                if (serveTls)
                 {
-                    // Sourcing both values from the declared endpoints (rather than the
-                    // parsed config) keeps a single chain of truth: Cargo.toml -> endpoint
-                    // annotation -> environment variable.
-                    var http = resource.GetEndpoint(HttpEndpointName);
-                    var reload = resource.GetEndpoint(ReloadEndpointName);
-                    context.EnvironmentVariables["LEPTOS_SITE_ADDR"] =
-                        ReferenceExpression.Create($"0.0.0.0:{http.Property(EndpointProperty.Port)}");
-                    context.EnvironmentVariables["LEPTOS_RELOAD_PORT"] =
-                        ReferenceExpression.Create($"{reload.Property(EndpointProperty.Port)}");
-                });
+                    // Loopback-only: the probe runs on this host, and nothing else
+                    // should reach the unauthenticated plain-http surface.
+                    var health = resource.GetEndpoint(HealthEndpointName);
+                    context.EnvironmentVariables["HEALTH_ADDR"] =
+                        ReferenceExpression.Create($"127.0.0.1:{health.Property(EndpointProperty.Port)}");
+                }
+            });
         }
         else
         {
@@ -145,6 +198,15 @@ public static class LeptosHostingExtensions
             // cargo can exist without rustup (distro packages); the target may still be
             // installed by other means, so an unprobeable check must not block startup.
             WarnWhenProbeUnavailable: true),
+        // The server's tls-rustls feature pulls in aws-lc-sys, whose build script
+        // compiles C. A C compiler lives outside rustup, so a fresh machine can
+        // pass every Rust check above and still fail mid-build with a raw cc
+        // error. (cmake is deliberately not checked: aws-lc-sys prefers it but
+        // falls back to a bundled cc-only builder on mainstream targets - this
+        // workspace builds without cmake installed.)
+        new("cc (C compiler; aws-lc-sys compiles C for rustls TLS)",
+            "cc", ["--version"],
+            Remedy: "install a C toolchain (Debian/Ubuntu: apt install build-essential)"),
     ];
 
     /// <summary>

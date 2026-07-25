@@ -7,6 +7,7 @@
 
 pub mod security;
 pub mod telemetry;
+pub mod tls;
 
 pub use telemetry::{TelemetryConfig, TelemetryError, TelemetryGuard};
 
@@ -30,6 +31,22 @@ async fn readyz() -> (StatusCode, &'static str) {
     (StatusCode::OK, "ok")
 }
 
+/// Router for the auxiliary plain-http health listener: `/readyz` and nothing else.
+///
+/// Bound (by `main`, when `HEALTH_ADDR` is set) in addition to the site listener
+/// so orchestrator probes reach readiness without trusting the TLS certificate.
+/// Serving nothing else keeps the unauthenticated plain-http surface minimal.
+pub fn health_router() -> Router {
+    Router::new().route(READYZ_PATH, get(readyz))
+}
+
+/// The auxiliary health listener's complete app: [`health_router`] wrapped in
+/// the same constant security headers the main router carries, so the two
+/// `/readyz` surfaces respond identically however they are reached.
+pub fn health_app() -> Router {
+    health_router().layer(from_fn(security::set_security_headers))
+}
+
 /// Assemble the application router.
 ///
 /// The Leptos routes + fallback are traced via [`telemetry::trace_layer`]; `/readyz`
@@ -50,8 +67,7 @@ pub fn router(leptos_options: LeptosOptions) -> Router {
     // The constant security headers wrap the whole router (outermost layer,
     // added last), so every response carries them: SSR pages, static assets,
     // and /readyz. The per-request CSP is set separately during SSR render.
-    Router::new()
-        .route(READYZ_PATH, get(readyz))
+    health_router()
         .merge(traced)
         .layer(from_fn(security::set_security_headers))
 }

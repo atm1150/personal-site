@@ -135,6 +135,55 @@ public class LeptosSiteConfigTests
         Assert.Contains("failed to parse", ex.Message);
     }
 
+    // health-port defaults like ready-path does: the pair is one contract (the
+    // auxiliary health listener the orchestrator probes on TLS runs), so both
+    // halves follow the same declared-or-default rule.
+    [Fact]
+    public void Parse_MissingHealthPort_DefaultsTo4002()
+    {
+        var config = LeptosSiteConfig.Parse(Toml(), Source);
+
+        Assert.Equal(4002, config.HealthPort.Value);
+    }
+
+    [Fact]
+    public void Parse_DeclaredHealthPort_IsUsed()
+    {
+        var config = LeptosSiteConfig.Parse(Toml(
+            orchestratorSection: "[workspace.metadata.orchestrator]\nhealth-port = 5002"), Source);
+
+        Assert.Equal(5002, config.HealthPort.Value);
+    }
+
+    [Fact]
+    public void Parse_HealthPortOutOfRange_Throws()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() => LeptosSiteConfig.Parse(Toml(
+            orchestratorSection: "[workspace.metadata.orchestrator]\nhealth-port = 70000"), Source));
+
+        Assert.Contains("health port must be within 1-65535", ex.Message);
+    }
+
+    // Same cross-field invariant as site/reload: a colliding health port would fail
+    // to bind at runtime with no hint why - reject it at startup instead.
+    [Fact]
+    public void Parse_HealthPortEqualToSitePort_Throws()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() => LeptosSiteConfig.Parse(Toml(
+            orchestratorSection: "[workspace.metadata.orchestrator]\nhealth-port = 4000"), Source));
+
+        Assert.Contains("must be distinct", ex.Message);
+    }
+
+    [Fact]
+    public void Parse_HealthPortEqualToReloadPort_Throws()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() => LeptosSiteConfig.Parse(Toml(
+            orchestratorSection: "[workspace.metadata.orchestrator]\nhealth-port = 4001"), Source));
+
+        Assert.Contains("must be distinct", ex.Message);
+    }
+
     [Fact]
     public void Parse_DeclaredReadyPath_IsUsed()
     {

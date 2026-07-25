@@ -75,6 +75,41 @@ internal readonly record struct ReloadPort
 }
 
 /// <summary>
+/// The TCP port for the site server's auxiliary plain-http health listener, from
+/// <c>health-port</c> in <c>[workspace.metadata.orchestrator]</c>. On TLS runs the
+/// AppHost injects <c>HEALTH_ADDR</c> from this port and probes readiness there, so
+/// the probe never has to trust the site's certificate. See <see cref="SitePort"/>
+/// for the conventions the port wrapper types share.
+/// </summary>
+internal readonly record struct HealthPort
+{
+    /// <summary>
+    /// Default, used when the workspace does not declare <c>health-port</c> - the
+    /// next port after the site (4000) and reload (4001) defaults.
+    /// </summary>
+    public static HealthPort Default { get; } = new(4002);
+
+    /// <summary>The validated port number, always within 1-65535.</summary>
+    public int Value { get; }
+
+    /// <exception cref="InvalidOperationException">The value is outside 1-65535.</exception>
+    public HealthPort(int value)
+    {
+        if (value is < 1 or > 65535)
+        {
+            throw new InvalidOperationException(
+                $"AddLeptosServerApp: health port must be within 1-65535; got {value}.");
+        }
+
+        Value = value;
+    }
+
+    /// <summary>The bare port number (no record type name), so the value can be embedded
+    /// directly in addresses and environment variables.</summary>
+    public override string ToString() => Value.ToString(CultureInfo.InvariantCulture);
+}
+
+/// <summary>
 /// The readiness path the orchestrator probes, from <c>ready-path</c> in
 /// <c>[workspace.metadata.orchestrator]</c> or from a caller-supplied override.
 /// Always valid once constructed; see <see cref="SitePort"/> for the conventions
@@ -130,16 +165,25 @@ internal sealed record LeptosSiteConfig
     /// <c>ready-path</c>; defaults to <see cref="ReadyPath.Default"/>.</summary>
     public ReadyPath ReadyPath { get; }
 
-    private LeptosSiteConfig(SitePort sitePort, ReloadPort reloadPort, ReadyPath readyPath)
+    /// <summary>Port for the auxiliary health listener, from
+    /// <c>[workspace.metadata.orchestrator]</c> <c>health-port</c>; defaults to
+    /// <see cref="HealthPort.Default"/>. Used on TLS runs only.</summary>
+    public HealthPort HealthPort { get; }
+
+    private LeptosSiteConfig(SitePort sitePort, ReloadPort reloadPort, ReadyPath readyPath, HealthPort healthPort)
     {
-        if (sitePort.Value == reloadPort.Value)
+        if (sitePort.Value == reloadPort.Value
+            || sitePort.Value == healthPort.Value
+            || reloadPort.Value == healthPort.Value)
         {
             throw new InvalidOperationException(
-                $"AddLeptosServerApp: site port {sitePort} and reload port {reloadPort} must be distinct.");
+                $"AddLeptosServerApp: site port {sitePort}, reload port {reloadPort}, and health port "
+                + $"{healthPort} must be distinct.");
         }
         SitePort = sitePort;
         ReloadPort = reloadPort;
         ReadyPath = readyPath;
+        HealthPort = healthPort;
     }
 
     /// <summary>Reads and validates the orchestrator-relevant config from a workspace
@@ -184,10 +228,13 @@ internal sealed record LeptosSiteConfig
             ?? throw new InvalidOperationException(
                 $"AddLeptosServerApp: 'reload-port' missing from [[workspace.metadata.leptos]] in '{source}'.");
 
+        var orchestrator = cargo.Workspace?.Metadata?.Orchestrator;
+
         return new LeptosSiteConfig(
             ParseSitePort(leptos.SiteAddr, source),
             new ReloadPort(reloadPort),
-            ParseReadyPath(cargo.Workspace?.Metadata?.Orchestrator?.ReadyPath, source));
+            ParseReadyPath(orchestrator?.ReadyPath, source),
+            orchestrator?.HealthPort is int healthPort ? new HealthPort(healthPort) : HealthPort.Default);
     }
 
     /// <summary>Extracts the validated port from a <c>site-addr</c> value.</summary>
@@ -287,5 +334,6 @@ internal sealed record LeptosSiteConfig
     private sealed class OrchestratorMetadata
     {
         [JsonPropertyName("ready-path")] public string? ReadyPath { get; set; }
+        [JsonPropertyName("health-port")] public int? HealthPort { get; set; }
     }
 }

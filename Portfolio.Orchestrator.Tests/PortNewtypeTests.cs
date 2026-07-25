@@ -48,6 +48,25 @@ public class PortNewtypeTests
         Assert.Contains("reload port must be within 1-65535", ex.Message);
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(4002)]
+    [InlineData(65535)]
+    public void HealthPort_AcceptsValuesInRange(int value)
+    {
+        Assert.Equal(value, new HealthPort(value).Value);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(65536)]
+    public void HealthPort_RejectsValuesOutOfRange(int value)
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() => new HealthPort(value));
+        Assert.Contains("health port must be within 1-65535", ex.Message);
+    }
+
     // The ToString overrides feed environment variables and addresses, so the format is
     // load-bearing: it must be the bare number, not the record's default
     // "SitePort { Value = 4000 }" rendering.
@@ -61,5 +80,11 @@ public class PortNewtypeTests
     public void ReloadPort_ToString_IsBareNumber()
     {
         Assert.Equal("4001", new ReloadPort(4001).ToString());
+    }
+
+    [Fact]
+    public void HealthPort_ToString_IsBareNumber()
+    {
+        Assert.Equal("4002", new HealthPort(4002).ToString());
     }
 }

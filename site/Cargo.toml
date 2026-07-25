@@ -18,6 +18,10 @@ leptos_router = { version = "0.8.2" }
 leptos_axum = { version = "0.8.2" }
 
 axum = "0.8.4"
+# TLS termination for the server binary. tls-rustls selects rustls with its
+# default CryptoProvider, aws-lc-rs (ring is in security-only maintenance,
+# RUSTSEC-2025-0007; rustls-rustcrypto is not production-blessed for TLS).
+axum-server = { version = "0.8.0", features = ["tls-rustls"] }
 cfg-if = "1.0.0"
 # Component library (shadcn/Basecoat port for Leptos). Feature-per-component:
 # enable only what the app uses. theme_provider is required - <ThemeProvider>
@@ -38,6 +42,11 @@ wasm-bindgen = "0.2.106"
 # with a test, so the two sides cannot drift silently.
 [workspace.metadata.orchestrator]
 ready-path = "/readyz"
+# Port for the auxiliary plain-http readiness listener. On TLS runs the AppHost
+# injects HEALTH_ADDR from this port and probes readiness there, so the probe
+# never has to trust the site certificate. (The server itself has no default:
+# it binds the listener only when HEALTH_ADDR is present.)
+health-port = 4002
 
 # See https://github.com/leptos-rs/cargo-leptos for documentation of all the parameters.
 
