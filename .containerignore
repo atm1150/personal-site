@@ -1,0 +1,11 @@
+# Keep the build context to what the Containerfile consumes: sources under
+# site/, minus build output. Also keeps untracked local files out of the
+# context on dev checkouts.
+.git
+site/target
+Portfolio.Orchestrator/bin
+Portfolio.Orchestrator/obj
+Portfolio.Orchestrator.Tests/bin
+Portfolio.Orchestrator.Tests/obj
+CLAUDE.md
+.claude

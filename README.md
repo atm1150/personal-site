@@ -12,6 +12,26 @@ cargo leptos watch            # dev server on http://127.0.0.1:4000
 cargo leptos build --release  # server binary + site bundle under site/target/
 ```
 
+## Container
+
+Multi-stage [Containerfile](Containerfile), buildable with podman or docker from the repository root. The builder pins the same Rust image and cargo-leptos version as CI; the runtime image is distroless, contains only the server binary and the compiled site assets, and runs as a non-root user.
+
+```sh
+podman build -t portfolio .
+podman run --rm -p 8080:8080 portfolio   # http://127.0.0.1:8080
+```
+
+The server binds `LEPTOS_SITE_ADDR` (image default `0.0.0.0:8080`). To serve TLS, mount a PEM certificate/key pair and point the TLS variables at it; `HEALTH_ADDR` optionally binds an auxiliary plain-http listener serving only `/readyz`, so orchestrator probes need not trust the certificate:
+
+```sh
+podman run --rm -p 8443:8443 -p 8081:8081 \
+  -v ./certs:/certs:ro \
+  -e LEPTOS_SITE_ADDR=0.0.0.0:8443 \
+  -e TLS_CERT_PATH=/certs/site.pem \
+  -e TLS_KEY_PATH=/certs/site.key \
+  -e HEALTH_ADDR=0.0.0.0:8081 \
+  portfolio
+```
 ## TLS
 
 The server binds plain http unless `TLS_CERT_PATH` and `TLS_KEY_PATH` are both set, in which case it terminates TLS itself (rustls) from that PEM certificate/key pair; setting exactly one of them is a startup error. When `HEALTH_ADDR` is set, the same process additionally binds a plain-http listener at that address serving only `/readyz`, so readiness can be probed without trusting the site certificate. The port for that listener is declared as `health-port` in `[workspace.metadata.orchestrator]` in `site/Cargo.toml`.
