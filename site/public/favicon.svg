@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Letterforms are hand-drawn paths, not <text>: SVG favicons render with
+       the viewer's installed fonts, so glyph text would look different per
+       platform. Paths render identically everywhere. -->
+  <rect width="64" height="64" rx="12" fill="#1e293b"/>
+  <g stroke="#f8fafc" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M10 44 L18 20 L26 44"/>
+    <path d="M12.7 36 L23.3 36"/>
+    <path d="M34 44 V20 L44 36 L54 20 V44"/>
+  </g>
+</svg>
