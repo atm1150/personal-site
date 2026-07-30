@@ -56,6 +56,31 @@ jobs:
         working-directory: site
         run: cargo leptos build --release
 
+  deny:
+    runs-on: ci
+    timeout-minutes: 15
+    container:
+      image: rust:1.96-bookworm
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Install Node 22 (JS actions need node inside the container)
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+          apt-get install -y --no-install-recommends nodejs
+      - uses: actions/checkout@v4
+      - name: Install cargo-deny
+        # Pinned like cargo-leptos above: a new cargo-deny release (new checks,
+        # changed defaults) must not be able to turn CI red on its own; bump
+        # deliberately alongside the local install.
+        run: |
+          curl -L --proto '=https' --tlsv1.2 -sSf \
+            https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+          cargo binstall -y --locked cargo-deny@0.20.2
+      - name: cargo deny check
+        working-directory: site
+        run: cargo deny check
+
   dotnet:
     runs-on: ci
     timeout-minutes: 20

@@ -45,6 +45,16 @@ When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, the server exports traces and logs ov
 
 The exporter is built without TLS support: the endpoint must be a plain `http://` URL, so the collector must run co-located with the server or be reachable over a trusted network. `https://` endpoints are rejected at startup until a `tls-*` feature of `opentelemetry-otlp` is enabled in `site/server/Cargo.toml`.
 
+## Dependency hygiene
+
+[cargo-deny](https://github.com/EmbarkStudios/cargo-deny) checks the dependency tree: RUSTSEC security advisories, dependency licenses against an allow-list, duplicate crate versions, and registry sources. The policy lives in [site/deny.toml](site/deny.toml).
+
+```sh
+cargo install cargo-deny --locked
+cd site
+cargo deny check
+```
+
 ## License
 
 © 2026 Andrew Miller. All rights reserved — published for reading as a portfolio, not for reuse. See [LICENSE](LICENSE); third-party components remain under their own terms.

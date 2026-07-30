@@ -1,0 +1,47 @@
+# cargo-deny policy for this workspace. Run from site/: cargo deny check
+# Checks: security advisories (RUSTSEC), dependency licenses against the
+# allow-list below, duplicate crate versions, and crate registry sources.
+
+[graph]
+# Only the targets this workspace actually compiles for: the server binary's
+# host triple and the frontend's wasm triple. Without this, cargo-deny would
+# also scan dependencies that only activate on other platforms.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "wasm32-unknown-unknown",
+]
+
+[licenses]
+# Workspace crates are unpublished (see LICENSE); the license check applies to
+# dependencies only.
+private = { ignore = true }
+# Minimal allow-list: licenses are added here as the dependency tree actually
+# requires them, not preemptively. All entries are permissive/non-copyleft.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+]
+
+[advisories]
+# Deliberate exceptions only, one justification per entry. Both entries are
+# informational "unmaintained" advisories, not vulnerabilities, on compile-time
+# proc-macro helpers pulled in by the Leptos macro stack: they never run in the
+# deployed server, and dropping them is not possible without leaving Leptos.
+# Revisit on Leptos upgrades.
+ignore = [
+    { id = "RUSTSEC-2024-0436", reason = "paste is unmaintained; build-time dep via leptos -> either_of" },
+    { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2 is unmaintained; build-time dep via leptos_macro" },
+]
+
+[bans]
+# Duplicate versions of the same crate warn rather than fail: duplicates are
+# a build-time/size cost, not a supply-chain risk.
+multiple-versions = "warn"

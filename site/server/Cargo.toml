@@ -2,6 +2,8 @@
 name = "server"
 version = "0.1.0"
 edition = "2024"
+# Proprietary (see LICENSE at the repo root); never publishable to a registry.
+publish = false
 
 [dependencies]
 app = { path = "../app", default-features = false, features = ["ssr"] }
