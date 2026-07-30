@@ -5,6 +5,7 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use leptos::prelude::LeptosOptions;
+use server::security::Hsts;
 use tower::ServiceExt; // brings `oneshot` onto the router
 
 #[tokio::test]
@@ -12,7 +13,7 @@ async fn unmatched_route_renders_not_found_page_with_404() {
     // `output_name` is the only field without a default; site_root defaults to
     // ".", so the fallback's static-file probe misses and SSR rendering runs.
     let options = LeptosOptions::builder().output_name("portfolio").build();
-    let app = server::router(options);
+    let app = server::router(options, Hsts::Off);
 
     let response = app
         .oneshot(

@@ -25,6 +25,8 @@ public class LeptosSiteConfigTests
             {orchestratorSection}
             """;
 
+    // --- [[workspace.metadata.leptos]]: site-addr and reload-port (required) ---
+
     [Fact]
     public void Parse_ValidWorkspace_YieldsPortsAndDefaultReadyPath()
     {
@@ -135,6 +137,12 @@ public class LeptosSiteConfigTests
         Assert.Contains("failed to parse", ex.Message);
     }
 
+    // --- health-port: declared-or-default ---
+    // This and the following clusters cover the optional [workspace.metadata.orchestrator]
+    // keys, each resolving declared-or-default. Every Declared* test declares a
+    // NON-default value: a declared default is indistinguishable from the fallback,
+    // so it could not prove the parser read the key.
+
     // health-port defaults like ready-path does: the pair is one contract (the
     // auxiliary health listener the orchestrator probes on TLS runs), so both
     // halves follow the same declared-or-default rule.
@@ -184,6 +192,9 @@ public class LeptosSiteConfigTests
         Assert.Contains("must be distinct", ex.Message);
     }
 
+    // --- ready-path: declared-or-default ---
+    // (The default half lives in Parse_ValidWorkspace_YieldsPortsAndDefaultReadyPath.)
+
     [Fact]
     public void Parse_DeclaredReadyPath_IsUsed()
     {
@@ -203,6 +214,31 @@ public class LeptosSiteConfigTests
 
         Assert.Contains("must start with '/'", ex.Message);
     }
+
+    // --- tls: declared-or-default ---
+
+    // tls defaults like health-port and ready-path do: absent means the everyday
+    // orchestrated stack still proves the https code path.
+    [Fact]
+    public void Parse_MissingTls_DefaultsToTrue()
+    {
+        var config = LeptosSiteConfig.Parse(Toml(), Source);
+
+        Assert.True(config.Tls);
+    }
+
+    // false is the only observable override here: the default is already true, so a
+    // declared true could not tell "parser read the key" from "parser fell back".
+    [Fact]
+    public void Parse_DeclaredTlsFalse_OverridesDefaultTrue()
+    {
+        var config = LeptosSiteConfig.Parse(Toml(
+            orchestratorSection: "[workspace.metadata.orchestrator]\ntls = false"), Source);
+
+        Assert.False(config.Tls);
+    }
+
+    // --- file access (ReadFrom, the I/O wrapper over Parse) ---
 
     [Fact]
     public void ReadFrom_MissingFile_Throws()

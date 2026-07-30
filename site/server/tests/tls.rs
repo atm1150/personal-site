@@ -8,12 +8,13 @@ use std::time::Duration;
 
 use axum_server::Handle;
 use leptos::prelude::LeptosOptions;
+use server::security::Hsts;
 
 /// site_root defaults to ".", so the fallback's static-file probe misses and
 /// SSR runs; output_name is the only field without a default.
-fn test_router() -> axum::Router {
+fn test_router(hsts: Hsts) -> axum::Router {
     let options = LeptosOptions::builder().output_name("portfolio").build();
-    server::router(options)
+    server::router(options, hsts)
 }
 
 /// A throwaway self-signed cert for `localhost`, written to PEM files the way
@@ -51,7 +52,7 @@ async fn tls_listener_serves_readyz_over_https() -> Result<(), Box<dyn std::erro
 
     let handle = Handle::new();
     let server_task = tokio::spawn(server::tls::serve(
-        test_router(),
+        test_router(Hsts::On),
         "127.0.0.1:0".parse::<SocketAddr>()?,
         cert.cert_path.clone(),
         cert.key_path.clone(),
@@ -94,7 +95,7 @@ async fn tls_serve_fails_closed_on_malformed_pem() -> Result<(), Box<dyn std::er
     std::fs::write(&key_path, "not a key")?;
 
     let result = server::tls::serve(
-        test_router(),
+        test_router(Hsts::Off),
         "127.0.0.1:0".parse::<SocketAddr>()?,
         cert_path,
         key_path,
@@ -157,6 +158,61 @@ async fn health_app_carries_security_headers() -> Result<(), Box<dyn std::error:
             .and_then(|v| v.to_str().ok()),
         Some("nosniff"),
         "the auxiliary listener must carry the same constant security headers as the main router"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn hsts_reaches_the_client_over_a_real_tls_handshake()
+-> Result<(), Box<dyn std::error::Error>> {
+    let cert = throwaway_cert()?;
+
+    let handle = Handle::new();
+    let server_task = tokio::spawn(server::tls::serve(
+        test_router(Hsts::On),
+        "127.0.0.1:0".parse::<SocketAddr>()?,
+        cert.cert_path.clone(),
+        cert.key_path.clone(),
+        handle.clone(),
+    ));
+
+    let addr = tokio::time::timeout(Duration::from_secs(5), handle.listening())
+        .await?
+        .expect("TLS listener should bind");
+
+    let client = reqwest::Client::builder()
+        .add_root_certificate(reqwest::Certificate::from_pem(cert.cert_pem.as_bytes())?)
+        .resolve("localhost", addr)
+        .build()?;
+
+    let response = client
+        .get(format!("https://localhost:{}/readyz", addr.port()))
+        .send()
+        .await?;
+    assert_eq!(
+        response
+            .headers()
+            .get("strict-transport-security")
+            .and_then(|v| v.to_str().ok()),
+        Some("max-age=300"),
+        "a real https response must carry HSTS"
+    );
+
+    handle.shutdown();
+    server_task.await??;
+    Ok(())
+}
+
+#[tokio::test]
+async fn health_listener_never_carries_hsts() -> Result<(), Box<dyn std::error::Error>> {
+    // The health listener is plain http even on TLS runs; HSTS there would tell
+    // the client to use https on a port that does not speak it.
+    let addr = spawn_health_app().await?;
+
+    let response = reqwest::get(format!("http://{addr}/readyz")).await?;
+    assert!(
+        !response.headers().contains_key("strict-transport-security"),
+        "the auxiliary plain-http listener must never send HSTS"
     );
     Ok(())
 }

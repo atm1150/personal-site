@@ -14,10 +14,11 @@ pub use telemetry::{TelemetryConfig, TelemetryError, TelemetryGuard};
 use app::*;
 use axum::Router;
 use axum::http::StatusCode;
-use axum::middleware::from_fn;
+use axum::middleware::from_fn_with_state;
 use axum::routing::get;
 use leptos::prelude::*;
 use leptos_axum::{LeptosRoutes, generate_route_list};
+use security::Hsts;
 
 /// The readiness path this server serves. The Aspire AppHost health-checks the same
 /// path, sourcing it from `ready-path` in `[workspace.metadata.orchestrator]` in the
@@ -44,7 +45,12 @@ pub fn health_router() -> Router {
 /// the same constant security headers the main router carries, so the two
 /// `/readyz` surfaces respond identically however they are reached.
 pub fn health_app() -> Router {
-    health_router().layer(from_fn(security::set_security_headers))
+    // Always Hsts::Off: this listener is plain http by design, and internal
+    // plumbing that is never browsed.
+    health_router().layer(from_fn_with_state(
+        Hsts::Off,
+        security::set_security_headers,
+    ))
 }
 
 /// Assemble the application router.
@@ -52,7 +58,7 @@ pub fn health_app() -> Router {
 /// The Leptos routes + fallback are traced via [`telemetry::trace_layer`]; `/readyz`
 /// is mounted *outside* that layer, so the orchestrator's health poll produces no
 /// spans — the exclusion is structural, telemetry has no knowledge of the path.
-pub fn router(leptos_options: LeptosOptions) -> Router {
+pub fn router(leptos_options: LeptosOptions, hsts: Hsts) -> Router {
     let routes = generate_route_list(App);
 
     let traced = Router::new()
@@ -69,7 +75,7 @@ pub fn router(leptos_options: LeptosOptions) -> Router {
     // and /readyz. The per-request CSP is set separately during SSR render.
     health_router()
         .merge(traced)
-        .layer(from_fn(security::set_security_headers))
+        .layer(from_fn_with_state(hsts, security::set_security_headers))
 }
 
 #[cfg(test)]

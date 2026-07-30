@@ -170,7 +170,12 @@ internal sealed record LeptosSiteConfig
     /// <see cref="HealthPort.Default"/>. Used on TLS runs only.</summary>
     public HealthPort HealthPort { get; }
 
-    private LeptosSiteConfig(SitePort sitePort, ReloadPort reloadPort, ReadyPath readyPath, HealthPort healthPort)
+    /// <summary>Whether orchestrated runs serve TLS, from
+    /// <c>[workspace.metadata.orchestrator]</c> <c>tls</c>; defaults to <c>true</c> so the
+    /// everyday stack proves the https code path. An ambient <c>SITE_TLS</c> overrides it.</summary>
+    public bool Tls { get; }
+
+    private LeptosSiteConfig(SitePort sitePort, ReloadPort reloadPort, ReadyPath readyPath, HealthPort healthPort, bool tls)
     {
         if (sitePort.Value == reloadPort.Value
             || sitePort.Value == healthPort.Value
@@ -184,6 +189,7 @@ internal sealed record LeptosSiteConfig
         ReloadPort = reloadPort;
         ReadyPath = readyPath;
         HealthPort = healthPort;
+        Tls = tls;
     }
 
     /// <summary>Reads and validates the orchestrator-relevant config from a workspace
@@ -234,7 +240,8 @@ internal sealed record LeptosSiteConfig
             ParseSitePort(leptos.SiteAddr, source),
             new ReloadPort(reloadPort),
             ParseReadyPath(orchestrator?.ReadyPath, source),
-            orchestrator?.HealthPort is int healthPort ? new HealthPort(healthPort) : HealthPort.Default);
+            orchestrator?.HealthPort is int healthPort ? new HealthPort(healthPort) : HealthPort.Default,
+            orchestrator?.Tls ?? true);
     }
 
     /// <summary>Extracts the validated port from a <c>site-addr</c> value.</summary>
@@ -335,5 +342,6 @@ internal sealed record LeptosSiteConfig
     {
         [JsonPropertyName("ready-path")] public string? ReadyPath { get; set; }
         [JsonPropertyName("health-port")] public int? HealthPort { get; set; }
+        [JsonPropertyName("tls")] public bool? Tls { get; set; }
     }
 }

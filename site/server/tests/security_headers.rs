@@ -6,17 +6,18 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use leptos::prelude::LeptosOptions;
+use server::security::Hsts;
 use tower::ServiceExt; // brings `oneshot` onto the router
 
 /// site_root defaults to ".", so the fallback's static-file probe misses and
 /// SSR runs; output_name is the only field without a default.
-fn test_router() -> axum::Router {
+fn test_router(hsts: Hsts) -> axum::Router {
     let options = LeptosOptions::builder().output_name("portfolio").build();
-    server::router(options)
+    server::router(options, hsts)
 }
 
-async fn get(uri: &str) -> axum::http::Response<Body> {
-    test_router()
+async fn get_with(hsts: Hsts, uri: &str) -> axum::http::Response<Body> {
+    test_router(hsts)
         .oneshot(
             Request::builder()
                 .uri(uri)
@@ -25,6 +26,10 @@ async fn get(uri: &str) -> axum::http::Response<Body> {
         )
         .await
         .expect("router should respond")
+}
+
+async fn get(uri: &str) -> axum::http::Response<Body> {
+    get_with(Hsts::Off, uri).await
 }
 
 async fn body_string(response: axum::http::Response<Body>) -> String {
@@ -119,6 +124,29 @@ async fn every_response_carries_the_constant_security_headers() {
                 .map(|v| v.as_bytes()),
             Some(&b"same-origin"[..]),
             "{uri} must send Cross-Origin-Resource-Policy: same-origin"
+        );
+    }
+}
+
+#[tokio::test]
+async fn hsts_is_emitted_only_when_the_listener_serves_tls() {
+    for uri in ["/", "/this-route-does-not-exist"] {
+        let on = get_with(Hsts::On, uri).await.headers().clone();
+        assert_eq!(
+            on.get("strict-transport-security").map(|v| v.as_bytes()),
+            Some(&b"max-age=300"[..]),
+            "{uri} must send HSTS when the listener serves TLS"
+        );
+    }
+}
+
+#[tokio::test]
+async fn hsts_is_absent_on_plain_http_runs() {
+    for uri in ["/", "/this-route-does-not-exist"] {
+        let off = get_with(Hsts::Off, uri).await.headers().clone();
+        assert!(
+            !off.contains_key("strict-transport-security"),
+            "{uri} must not send HSTS over plain http - the browser would refuse http on this host until it expires"
         );
     }
 }

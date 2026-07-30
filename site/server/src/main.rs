@@ -7,7 +7,8 @@
 
 use leptos::prelude::*;
 use server::TelemetryConfig;
-use server::tls::{self, TlsConfig, TlsMode};
+use server::security::Hsts;
+use server::tls::{self, TlsConfig, TlsMode, TlsSource};
 
 #[tokio::main]
 async fn main() {
@@ -21,10 +22,23 @@ async fn main() {
     let conf =
         get_configuration(None).expect("leptos configuration should resolve from LEPTOS_* env");
     let addr = conf.leptos_options.site_addr;
-    let app = server::router(conf.leptos_options);
 
+    // Resolved before the router is built: the router needs to know whether this
+    // run serves TLS, and a misconfigured listener should fail before any work.
     let tls_config = TlsConfig::from_env()
-        .expect("listener configuration should resolve from TLS_*_PATH/HEALTH_ADDR env");
+        .expect("listener configuration should resolve from SITE_TLS/TLS_*_PATH/HEALTH_ADDR env");
+
+    // One provenance line per resolved key: an override is never an error, but it
+    // is always visible. "declared" vs "defaulted" is exactly the distinction the
+    // env contract now carries and the old cert-presence inference could not.
+    let (tls_state, tls_origin) = match (&tls_config.mode, tls_config.source) {
+        (TlsMode::Enabled { .. }, _) => ("on", "env SITE_TLS"),
+        (TlsMode::Disabled, TlsSource::Declared) => ("off", "env SITE_TLS"),
+        (TlsMode::Disabled, TlsSource::Defaulted) => ("off", "default (SITE_TLS unset)"),
+    };
+    tracing::info!(tls = tls_state, source = tls_origin, "tls intent resolved");
+
+    let app = server::router(conf.leptos_options, Hsts::from(&tls_config.mode));
 
     match tls_config.mode {
         TlsMode::Disabled => {

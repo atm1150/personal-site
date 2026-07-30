@@ -47,6 +47,10 @@ ready-path = "/readyz"
 # never has to trust the site certificate. (The server itself has no default:
 # it binds the listener only when HEALTH_ADDR is present.)
 health-port = 4002
+# Whether orchestrated runs serve TLS. The AppHost injects SITE_TLS from this,
+# and an ambient SITE_TLS in the AppHost's own environment overrides it. The
+# deployed container sets SITE_TLS itself; this value is the dev default only.
+tls = true
 
 # See https://github.com/leptos-rs/cargo-leptos for documentation of all the parameters.
 

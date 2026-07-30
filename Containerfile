@@ -36,11 +36,13 @@ ARG SITE_ROOT=/app/site
 COPY --from=builder /app/site/target/release/server /app/server
 COPY --from=builder /app/site/target/site ${SITE_ROOT}
 
-# The runtime env contract; override LEPTOS_SITE_ADDR to bind elsewhere, and
-# set TLS_CERT_PATH/TLS_KEY_PATH (mounted PEM pair) plus HEALTH_ADDR to serve
-# TLS with the auxiliary plain-http /readyz listener.
+# The runtime env contract; override LEPTOS_SITE_ADDR to bind elsewhere. SITE_TLS
+# accepts on or off; serving TLS means setting SITE_TLS=on together with
+# TLS_CERT_PATH/TLS_KEY_PATH (mounted PEM pair). HEALTH_ADDR binds the auxiliary
+# plain-http /readyz listener.
 ENV LEPTOS_SITE_ROOT=${SITE_ROOT} \
-    LEPTOS_SITE_ADDR=0.0.0.0:${SITE_PORT}
+    LEPTOS_SITE_ADDR=0.0.0.0:${SITE_PORT} \
+    SITE_TLS=off
 EXPOSE ${SITE_PORT}
 
 ENTRYPOINT ["/app/server"]

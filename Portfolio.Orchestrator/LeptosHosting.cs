@@ -78,12 +78,15 @@ public static class LeptosHostingExtensions
             // error or a mid-build failure in the resource logs.
             RunToolchainPreflight(RunModePreflight);
 
-            // TLS is the run-mode default so the everyday stack proves the https code
-            // path; SITE_TLS=off restores the previous plain-http wiring (and with it
-            // hot reload from non-localhost clients, which mixed-content rules would
-            // otherwise block).
-            var serveTls = !string.Equals(
-                Environment.GetEnvironmentVariable(TlsSwitchEnvVar), "off", StringComparison.OrdinalIgnoreCase);
+            // Precedence, matching the port chain: ambient env -> Cargo.toml.
+            // An ambient SITE_TLS in the AppHost's own environment (shell or
+            // launchSettings.json) overrides the workspace default; absent falls
+            // back to the declared value. TLS is the default so the everyday
+            // stack proves the https code path; SITE_TLS=off restores the plain-http
+            // wiring (and with it hot reload from non-localhost clients, which
+            // mixed-content rules would otherwise block).
+            var ambientSiteTls = Environment.GetEnvironmentVariable(TlsSwitchEnvVar);
+            var serveTls = ResolveServeTls(ambientSiteTls, config.Tls);
 
             resourceBuilder
                 .WithArgs(["leptos", "watch", .. args ?? []])
@@ -129,6 +132,10 @@ public static class LeptosHostingExtensions
 
             resourceBuilder.WithEnvironment(context =>
             {
+                // The server requires declared intent: it never infers TLS from
+                // the presence of the certificate paths below.
+                context.EnvironmentVariables["SITE_TLS"] = serveTls ? "on" : "off";
+
                 // Sourcing the values from the declared endpoints (rather than the
                 // parsed config) keeps a single chain of truth: Cargo.toml -> endpoint
                 // annotation -> environment variable.
@@ -157,6 +164,30 @@ public static class LeptosHostingExtensions
 
         return resourceBuilder;
     }
+
+    /// <summary>
+    /// Resolves whether this run serves TLS, given the ambient <c>SITE_TLS</c> value (if
+    /// any) and the workspace's declared default. Pure and directly testable - no
+    /// <see cref="DistributedApplicationBuilder"/>, no toolchain probing, no environment
+    /// access; callers read the ambient variable and pass it in. Accepts only
+    /// <c>on</c>/<c>off</c> case-insensitively, matching the server's own <c>SITE_TLS</c>
+    /// vocabulary (<c>site/server/src/tls.rs</c>) exactly: null/empty is undeclared and
+    /// falls through to <paramref name="workspaceDefault"/>, but any other value throws
+    /// rather than being silently reinterpreted as "on" - the one documented vocabulary
+    /// now has one acceptance rule on both sides of the AppHost/server boundary.
+    /// </summary>
+    /// <param name="ambientSiteTls">The AppHost's own <c>SITE_TLS</c> environment variable, or null/empty if undeclared.</param>
+    /// <param name="workspaceDefault">The workspace's declared <c>tls</c> default from Cargo.toml, used when <paramref name="ambientSiteTls"/> is undeclared.</param>
+    /// <exception cref="InvalidOperationException"><paramref name="ambientSiteTls"/> is set to something other than <c>on</c> or <c>off</c>.</exception>
+    internal static bool ResolveServeTls(string? ambientSiteTls, bool workspaceDefault) =>
+        ambientSiteTls switch
+        {
+            null or "" => workspaceDefault,
+            _ when string.Equals(ambientSiteTls, "on", StringComparison.OrdinalIgnoreCase) => true,
+            _ when string.Equals(ambientSiteTls, "off", StringComparison.OrdinalIgnoreCase) => false,
+            _ => throw new InvalidOperationException(
+                $"AddLeptosServerApp: {TlsSwitchEnvVar} must be 'on' or 'off'; got '{ambientSiteTls}'."),
+        };
 
     /// <summary>
     /// One dev-environment prerequisite: a probe command whose success (and optionally
