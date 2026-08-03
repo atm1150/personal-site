@@ -2,28 +2,15 @@
 //! `ErrorTemplate` and returns HTTP 404, not a 200 with not-found content
 //! (the soft-404 that hurts crawlability).
 
-use axum::body::Body;
-use axum::http::{Request, StatusCode};
-use leptos::prelude::LeptosOptions;
+mod common;
+
+use axum::http::StatusCode;
+use common::{body_string, test_router};
 use server::security::Hsts;
-use tower::ServiceExt; // brings `oneshot` onto the router
 
 #[tokio::test]
 async fn unmatched_route_renders_not_found_page_with_404() {
-    // `output_name` is the only field without a default; site_root defaults to
-    // ".", so the fallback's static-file probe misses and SSR rendering runs.
-    let options = LeptosOptions::builder().output_name("portfolio").build();
-    let app = server::router(options, Hsts::Off);
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/this-route-does-not-exist")
-                .body(Body::empty())
-                .expect("request should build"),
-        )
-        .await
-        .expect("router should respond");
+    let response = common::get(test_router(Hsts::Off), "/this-route-does-not-exist").await;
 
     assert_eq!(
         response.status(),
@@ -31,10 +18,7 @@ async fn unmatched_route_renders_not_found_page_with_404() {
         "an unmatched route must return a hard 404"
     );
 
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .expect("body should collect");
-    let html = String::from_utf8(body.to_vec()).expect("body should be UTF-8");
+    let html = body_string(response).await;
 
     // Prove it was *our* ErrorTemplate that rendered, not just any 404 response.
     assert!(

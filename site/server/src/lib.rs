@@ -24,7 +24,7 @@ use security::Hsts;
 /// path, sourcing it from `ready-path` in `[workspace.metadata.orchestrator]` in the
 /// workspace Cargo.toml; `readyz_route_matches_workspace_metadata` below pins this
 /// const to that declaration so the two sides cannot drift silently.
-const READYZ_PATH: &str = "/readyz";
+pub const READYZ_PATH: &str = "/readyz";
 
 /// Readiness probe. Static 200 while the server is a single stateless process;
 /// gains real dependency checks (e.g. database reachability) when those arrive.

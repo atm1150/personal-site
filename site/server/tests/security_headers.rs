@@ -3,40 +3,40 @@
 //! nonce Leptos stamped on the inline hydration `<script>`. A header/script
 //! nonce mismatch would silently break hydration, so it is asserted directly.
 
-use axum::body::Body;
-use axum::http::{Request, StatusCode};
-use leptos::prelude::LeptosOptions;
-use server::security::Hsts;
-use tower::ServiceExt; // brings `oneshot` onto the router
+mod common;
 
-/// site_root defaults to ".", so the fallback's static-file probe misses and
-/// SSR runs; output_name is the only field without a default.
-fn test_router(hsts: Hsts) -> axum::Router {
-    let options = LeptosOptions::builder().output_name("portfolio").build();
-    server::router(options, hsts)
-}
+use std::collections::BTreeMap;
+
+use axum::body::Body;
+use axum::http::StatusCode;
+use common::{body_string, test_router};
+use server::READYZ_PATH;
+use server::security::Hsts;
+
+// HSTS is excluded: it is listener-conditional and has its own tests.
+const CONSTANT_SECURITY_HEADERS: [&str; 7] = [
+    "x-content-type-options",
+    "referrer-policy",
+    "x-frame-options",
+    "permissions-policy",
+    "x-xss-protection",
+    "cross-origin-opener-policy",
+    "cross-origin-resource-policy",
+];
+
+// Written out rather than imported from `server`: importing would only check
+// that the constant equals itself.
+const EXPECTED_REFERRER_POLICY: &str = "strict-origin-when-cross-origin";
+const EXPECTED_PERMISSIONS_POLICY: &str = "geolocation=(), camera=(), microphone=(), \
+usb=(), payment=(), accelerometer=(), gyroscope=(), magnetometer=(), \
+autoplay=(), fullscreen=(), picture-in-picture=(), display-capture=()";
 
 async fn get_with(hsts: Hsts, uri: &str) -> axum::http::Response<Body> {
-    test_router(hsts)
-        .oneshot(
-            Request::builder()
-                .uri(uri)
-                .body(Body::empty())
-                .expect("request should build"),
-        )
-        .await
-        .expect("router should respond")
+    common::get(test_router(hsts), uri).await
 }
 
 async fn get(uri: &str) -> axum::http::Response<Body> {
     get_with(Hsts::Off, uri).await
-}
-
-async fn body_string(response: axum::http::Response<Body>) -> String {
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .expect("body should collect");
-    String::from_utf8(bytes.to_vec()).expect("body should be UTF-8")
 }
 
 /// Extract the value delimited by `open` .. `close`, starting the search at the
@@ -85,7 +85,7 @@ async fn error_page_also_carries_a_csp_header() {
 
 #[tokio::test]
 async fn every_response_carries_the_constant_security_headers() {
-    for uri in ["/", "/this-route-does-not-exist"] {
+    for uri in ["/", "/this-route-does-not-exist", READYZ_PATH] {
         let headers = get(uri).await.headers().clone();
 
         assert_eq!(
@@ -98,13 +98,15 @@ async fn every_response_carries_the_constant_security_headers() {
             Some(&b"DENY"[..]),
             "{uri} must send X-Frame-Options: DENY"
         );
-        assert!(
-            headers.contains_key("referrer-policy"),
-            "{uri} must send a Referrer-Policy"
+        assert_eq!(
+            headers.get("referrer-policy").map(|v| v.as_bytes()),
+            Some(EXPECTED_REFERRER_POLICY.as_bytes()),
+            "{uri} must send Referrer-Policy: {EXPECTED_REFERRER_POLICY}"
         );
-        assert!(
-            headers.contains_key("permissions-policy"),
-            "{uri} must send a Permissions-Policy"
+        assert_eq!(
+            headers.get("permissions-policy").map(|v| v.as_bytes()),
+            Some(EXPECTED_PERMISSIONS_POLICY.as_bytes()),
+            "{uri} must send the full Permissions-Policy denylist"
         );
         assert_eq!(
             headers.get("x-xss-protection").map(|v| v.as_bytes()),
@@ -150,3 +152,41 @@ async fn hsts_is_absent_on_plain_http_runs() {
         );
     }
 }
+
+/// Just the constant headers, so per-response ones (content-type, CSP) don't
+/// break the comparison.
+fn constant_headers(response: &axum::http::Response<Body>) -> BTreeMap<&str, String> {
+    CONSTANT_SECURITY_HEADERS
+        .iter()
+        .filter_map(|name| {
+            let value = response.headers().get(*name)?;
+            Some((
+                *name,
+                value.to_str().expect("policy headers are ASCII").to_owned(),
+            ))
+        })
+        .collect()
+}
+
+async fn health_get(uri: &str) -> axum::http::Response<Body> {
+    common::get(server::health_app(), uri).await
+}
+
+/// The health listener is a separate `Router`; nothing keeps its layer stack in
+/// step with the site's. tls.rs checks it in isolation, which cannot detect the
+/// two drifting apart.
+#[tokio::test]
+async fn health_listener_readyz_matches_the_site_listener_readyz() {
+    let via_health = health_get(READYZ_PATH).await;
+    let via_site = get(READYZ_PATH).await;
+
+    assert_eq!(via_health.status(), StatusCode::OK);
+    assert_eq!(via_site.status(), StatusCode::OK);
+    assert_eq!(
+        constant_headers(&via_health),
+        constant_headers(&via_site),
+        "both /readyz surfaces must carry an identical set of constant security headers"
+    );
+}
+
+// No-HSTS on the health listener is covered by tls.rs over a real socket.

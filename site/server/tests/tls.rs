@@ -3,19 +3,15 @@
 //! TLS test performs a genuine rustls handshake against a throwaway rcgen
 //! certificate, which `tower::oneshot` cannot exercise.
 
+mod common;
+
 use std::net::SocketAddr;
 use std::time::Duration;
 
 use axum_server::Handle;
-use leptos::prelude::LeptosOptions;
+use common::test_router;
+use server::READYZ_PATH;
 use server::security::Hsts;
-
-/// site_root defaults to ".", so the fallback's static-file probe misses and
-/// SSR runs; output_name is the only field without a default.
-fn test_router(hsts: Hsts) -> axum::Router {
-    let options = LeptosOptions::builder().output_name("portfolio").build();
-    server::router(options, hsts)
-}
 
 /// A throwaway self-signed cert for `localhost`, written to PEM files the way
 /// the real env contract delivers them.
@@ -72,7 +68,7 @@ async fn tls_listener_serves_readyz_over_https() -> Result<(), Box<dyn std::erro
         .build()?;
 
     let response = client
-        .get(format!("https://localhost:{}/readyz", addr.port()))
+        .get(format!("https://localhost:{}{READYZ_PATH}", addr.port()))
         .send()
         .await?;
     assert_eq!(response.status(), 200, "readyz over TLS should be served");
@@ -127,7 +123,7 @@ async fn spawn_health_app() -> Result<SocketAddr, Box<dyn std::error::Error>> {
 async fn health_app_serves_readyz_over_plain_http() -> Result<(), Box<dyn std::error::Error>> {
     let addr = spawn_health_app().await?;
 
-    let response = reqwest::get(format!("http://{addr}/readyz")).await?;
+    let response = reqwest::get(format!("http://{addr}{READYZ_PATH}")).await?;
     assert_eq!(response.status(), 200, "readyz should be served");
     assert_eq!(response.text().await?, "ok");
     Ok(())
@@ -150,7 +146,7 @@ async fn health_app_serves_nothing_else() -> Result<(), Box<dyn std::error::Erro
 async fn health_app_carries_security_headers() -> Result<(), Box<dyn std::error::Error>> {
     let addr = spawn_health_app().await?;
 
-    let response = reqwest::get(format!("http://{addr}/readyz")).await?;
+    let response = reqwest::get(format!("http://{addr}{READYZ_PATH}")).await?;
     assert_eq!(
         response
             .headers()
@@ -186,7 +182,7 @@ async fn hsts_reaches_the_client_over_a_real_tls_handshake()
         .build()?;
 
     let response = client
-        .get(format!("https://localhost:{}/readyz", addr.port()))
+        .get(format!("https://localhost:{}{READYZ_PATH}", addr.port()))
         .send()
         .await?;
     assert_eq!(
@@ -209,7 +205,7 @@ async fn health_listener_never_carries_hsts() -> Result<(), Box<dyn std::error::
     // the client to use https on a port that does not speak it.
     let addr = spawn_health_app().await?;
 
-    let response = reqwest::get(format!("http://{addr}/readyz")).await?;
+    let response = reqwest::get(format!("http://{addr}{READYZ_PATH}")).await?;
     assert!(
         !response.headers().contains_key("strict-transport-security"),
         "the auxiliary plain-http listener must never send HSTS"
