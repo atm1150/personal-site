@@ -15,6 +15,7 @@ singlestage.workspace = true
 http.workspace = true
 cfg-if.workspace = true
 thiserror.workspace = true
+url.workspace = true
 
 [features]
 default = []

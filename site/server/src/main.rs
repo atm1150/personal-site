@@ -38,7 +38,37 @@ async fn main() {
     };
     tracing::info!(tls = tls_state, source = tls_origin, "tls intent resolved");
 
-    let app = server::router(conf.leptos_options, Hsts::from(&tls_config.mode));
+    // Same contract as SITE_TLS: absent is a fallback in dev, a hard failure
+    // under LEPTOS_ENV=PROD, and malformed is always fatal.
+    let is_prod = matches!(conf.leptos_options.env, leptos::config::Env::PROD);
+    let public_base_url = server::config::resolve_public_base_url(
+        is_prod,
+        std::env::var("PUBLIC_BASE_URL").ok().as_deref(),
+    )
+    .expect(
+        "PUBLIC_BASE_URL should be a bare absolute http(s) URL (required when LEPTOS_ENV=PROD)",
+    );
+    match &public_base_url {
+        Some(base) => {
+            tracing::info!(
+                base = base.as_str(),
+                source = "env PUBLIC_BASE_URL",
+                "public base url resolved"
+            );
+        }
+        None => {
+            tracing::info!(
+                source = "default (PUBLIC_BASE_URL unset)",
+                "public base url absent; og:url and canonical omitted"
+            );
+        }
+    }
+
+    let app = server::router(
+        conf.leptos_options,
+        Hsts::from(&tls_config.mode),
+        public_base_url,
+    );
 
     match tls_config.mode {
         TlsMode::Disabled => {

@@ -35,6 +35,12 @@ public static class LeptosHostingExtensions
     /// endpoint, no certificate or health-listener env injected).</summary>
     private const string TlsSwitchEnvVar = "SITE_TLS";
 
+    /// <summary>The server's public-origin env key. Ambient value in the AppHost's own
+    /// environment wins wholesale (same chain as <c>SITE_TLS</c>); otherwise the dev
+    /// default is composed from the resolved scheme and site port. The server validates
+    /// the value - a malformed override fails loudly there, not silently here.</summary>
+    private const string PublicBaseUrlEnvVar = "PUBLIC_BASE_URL";
+
     /// <summary>
     /// Adds a Leptos SSR server application to the distributed application, run via <c>cargo leptos watch</c>.
     /// </summary>
@@ -87,6 +93,8 @@ public static class LeptosHostingExtensions
             // mixed-content rules would otherwise block).
             var ambientSiteTls = Environment.GetEnvironmentVariable(TlsSwitchEnvVar);
             var serveTls = ResolveServeTls(ambientSiteTls, config.Tls);
+
+            var ambientBaseUrl = Environment.GetEnvironmentVariable(PublicBaseUrlEnvVar);
 
             resourceBuilder
                 .WithArgs(["leptos", "watch", .. args ?? []])
@@ -145,6 +153,16 @@ public static class LeptosHostingExtensions
                     ReferenceExpression.Create($"0.0.0.0:{site.Property(EndpointProperty.Port)}");
                 context.EnvironmentVariables["LEPTOS_RELOAD_PORT"] =
                     ReferenceExpression.Create($"{reload.Property(EndpointProperty.Port)}");
+                var scheme = serveTls ? "https" : "http";
+                if (UsesAmbientPublicBaseUrl(ambientBaseUrl))
+                {
+                    context.EnvironmentVariables[PublicBaseUrlEnvVar] = ambientBaseUrl!;
+                }
+                else
+                {
+                    context.EnvironmentVariables[PublicBaseUrlEnvVar] =
+                        ReferenceExpression.Create($"{scheme}://localhost:{site.Property(EndpointProperty.Port)}");
+                }
                 if (serveTls)
                 {
                     // Loopback-only: the probe runs on this host, and nothing else
@@ -188,6 +206,12 @@ public static class LeptosHostingExtensions
             _ => throw new InvalidOperationException(
                 $"AddLeptosServerApp: {TlsSwitchEnvVar} must be 'on' or 'off'; got '{ambientSiteTls}'."),
         };
+
+    /// <summary>Whether an ambient <c>PUBLIC_BASE_URL</c> counts as declared. Pure and
+    /// directly testable, like <see cref="ResolveServeTls"/>; whitespace-only is
+    /// undeclared, matching how empty env vars behave across shells.</summary>
+    internal static bool UsesAmbientPublicBaseUrl(string? ambient) =>
+        !string.IsNullOrWhiteSpace(ambient);
 
     /// <summary>
     /// One dev-environment prerequisite: a probe command whose success (and optionally

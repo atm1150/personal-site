@@ -1,12 +1,20 @@
+use crate::meta::{MetaDescription, MetaTitle, PageMeta, PageMetaTags};
 use leptos::prelude::*;
-use leptos_meta::Title;
 use singlestage::Card;
 
 /// The resume as a first-class app route.
 #[component]
 pub fn ResumePage() -> impl IntoView {
     view! {
-        <Title text="Andrew Miller — Software Engineer"/>
+        <PageMetaTags meta=PageMeta {
+            title: MetaTitle::new("Andrew Miller — Software Engineer")
+                .expect("resume title is a valid MetaTitle"),
+            description: MetaDescription::new(
+                "Resume of Andrew Miller, software engineer in Seattle, WA.",
+            )
+            .expect("resume description is a valid MetaDescription"),
+            image: None,
+        }/>
         <div class="resume-page">
             <Card class="resume-card">
                 // sticky download link

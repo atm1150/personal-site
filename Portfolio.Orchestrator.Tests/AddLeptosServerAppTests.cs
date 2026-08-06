@@ -186,4 +186,19 @@ public class AddLeptosServerAppTests
         Assert.Contains(ambient, ex.Message);
         Assert.Contains("'on' or 'off'", ex.Message);
     }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void UsesAmbientPublicBaseUrl_Undeclared_ReturnsFalse(string? ambient)
+    {
+        Assert.False(LeptosHostingExtensions.UsesAmbientPublicBaseUrl(ambient));
+    }
+
+    [Fact]
+    public void UsesAmbientPublicBaseUrl_Declared_ReturnsTrue()
+    {
+        Assert.True(LeptosHostingExtensions.UsesAmbientPublicBaseUrl("https://example.test"));
+    }
 }

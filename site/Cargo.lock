@@ -62,6 +62,7 @@ dependencies = [
  "leptos_router",
  "singlestage",
  "thiserror 2.0.18",
+ "url",
 ]
 
 [[package]]

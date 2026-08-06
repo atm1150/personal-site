@@ -5,6 +5,7 @@
 //! porting to a different runtime only needs a new `main` (or a new main/lib pair) —
 //! the app's shape is defined once, here.
 
+pub mod config;
 pub mod security;
 pub mod telemetry;
 pub mod tls;
@@ -58,14 +59,32 @@ pub fn health_app() -> Router {
 /// The Leptos routes + fallback are traced via [`telemetry::trace_layer`]; `/readyz`
 /// is mounted *outside* that layer, so the orchestrator's health poll produces no
 /// spans — the exclusion is structural, telemetry has no knowledge of the path.
-pub fn router(leptos_options: LeptosOptions, hsts: Hsts) -> Router {
+pub fn router(
+    leptos_options: LeptosOptions,
+    hsts: Hsts,
+    public_base_url: Option<app::meta::PublicBaseUrl>,
+) -> Router {
     let routes = generate_route_list(App);
 
     let traced = Router::new()
-        .leptos_routes(&leptos_options, routes, {
-            let leptos_options = leptos_options.clone();
-            move || shell(leptos_options.clone())
-        })
+        .leptos_routes_with_context(
+            &leptos_options,
+            routes,
+            {
+                let public_base_url = public_base_url.clone();
+                move || {
+                    // Provided only when configured: shell and pages read
+                    // use_context, and absence is the documented degrade path.
+                    if let Some(base) = public_base_url.clone() {
+                        provide_context(base);
+                    }
+                }
+            },
+            {
+                let leptos_options = leptos_options.clone();
+                move || shell(leptos_options.clone())
+            },
+        )
         .fallback(leptos_axum::file_and_error_handler(shell))
         .with_state(leptos_options)
         .layer(telemetry::trace_layer());

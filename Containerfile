@@ -40,6 +40,10 @@ COPY --from=builder /app/site/target/site ${SITE_ROOT}
 # accepts on or off; serving TLS means setting SITE_TLS=on together with
 # TLS_CERT_PATH/TLS_KEY_PATH (mounted PEM pair). HEALTH_ADDR binds the auxiliary
 # plain-http /readyz listener.
+#
+# This image runs in the default (DEV) leptos env, so og:url/canonical are
+# omitted unless PUBLIC_BASE_URL is set at run time. PUBLIC_BASE_URL becomes
+# required (startup fails without it) if LEPTOS_ENV=PROD is set here.
 ENV LEPTOS_SITE_ROOT=${SITE_ROOT} \
     LEPTOS_SITE_ADDR=0.0.0.0:${SITE_PORT} \
     SITE_TLS=off
