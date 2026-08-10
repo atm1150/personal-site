@@ -43,7 +43,8 @@ COPY --from=builder /app/site/target/site ${SITE_ROOT}
 #
 # This image runs in the default (DEV) leptos env, so og:url/canonical are
 # omitted unless PUBLIC_BASE_URL is set at run time. PUBLIC_BASE_URL becomes
-# required (startup fails without it) if LEPTOS_ENV=PROD is set here.
+# required (startup fails without it) if LEPTOS_ENV=PROD is set here. Setting
+# it also enables the www -> apex redirect.
 ENV LEPTOS_SITE_ROOT=${SITE_ROOT} \
     LEPTOS_SITE_ADDR=0.0.0.0:${SITE_PORT} \
     SITE_TLS=off

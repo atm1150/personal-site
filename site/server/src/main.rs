@@ -63,6 +63,17 @@ async fn main() {
             );
         }
     }
+    match &public_base_url {
+        Some(base) => tracing::info!(
+            www_host = format!("www.{}", base.host()),
+            source = "derived from PUBLIC_BASE_URL",
+            "www redirect enabled"
+        ),
+        None => tracing::info!(
+            source = "default (PUBLIC_BASE_URL unset)",
+            "www redirect disabled"
+        ),
+    }
 
     let app = server::router(
         conf.leptos_options,

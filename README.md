@@ -39,7 +39,7 @@ podman run --rm -p 8443:8443 -p 8081:8081 \
 
 The Aspire AppHost (`Portfolio.Orchestrator/`) applies this contract in run mode: it serves the site at `https://localhost:4000` using the ASP.NET Core developer certificate and probes readiness on the plain-http health port. Trust the certificate once per machine with `aspire certs trust` (launching the AppHost with `dotnet run` does not auto-trust it the way `aspire run` does). `SITE_TLS` is part of the server's own contract, not only the AppHost's; set it to `off` in the AppHost's environment to restore plain-http serving. Standalone `cargo leptos watch` is unaffected and serves http.
 
-`PUBLIC_BASE_URL` is the site's public origin (scheme, host, and optional port - no path), used to render the `og:url` meta tag and the canonical `<link>`. Leaving it unset omits both tags; everything else still works. Under `LEPTOS_ENV=PROD` it is required and the server fails at startup without it; a malformed value is a startup error in any environment.
+`PUBLIC_BASE_URL` is the site's public origin (scheme, host, and optional port - no path), used to render the `og:url` meta tag and the canonical `<link>`. Leaving it unset omits both tags; everything else still works. Under `LEPTOS_ENV=PROD` it is required and the server fails at startup without it; a malformed value is a startup error in any environment. Setting it also enables the canonical-host redirect: requests for `www.<its host>` get a 301 to the base URL plus the request's path and query. Unset, every `Host` is served as-is.
 
 ## Telemetry
 

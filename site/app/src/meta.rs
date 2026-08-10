@@ -118,7 +118,12 @@ impl OgImageUrl {
 /// The site's public origin (scheme + host + optional port), the prefix for
 /// og:url and the canonical link. Runtime truth: arrives via PUBLIC_BASE_URL.
 #[derive(Clone, Debug, PartialEq)]
-pub struct PublicBaseUrl(String);
+pub struct PublicBaseUrl {
+    origin: String,
+    /// The bare host, captured during the one `url` parse so `host()` costs
+    /// callers no re-parsing.
+    host: String,
+}
 
 impl PublicBaseUrl {
     pub fn new(value: &str) -> Result<Self, MetaError> {
@@ -126,20 +131,33 @@ impl PublicBaseUrl {
         if parsed.path() != "/" || parsed.query().is_some() || parsed.fragment().is_some() {
             return Err(MetaError::NotBare(value.to_owned()));
         }
+        // Can't fail: `parse_http_url` restricted the scheme to http/https,
+        // which always carry a host. The `url` crate lowercases it during
+        // parsing - the casing the www redirect's comparison relies on
+        // (pinned by a test below).
+        let host = parsed
+            .host_str()
+            .expect("http(s) URLs always have a host")
+            .to_owned();
         // Url normalizes a bare origin to a trailing "/"; store it bare so
         // join() is a plain concatenation with the request path.
         let mut origin: String = parsed.into();
         origin.truncate(origin.trim_end_matches('/').len());
-        Ok(Self(origin))
+        Ok(Self { origin, host })
     }
 
     pub fn as_str(&self) -> &str {
-        &self.0
+        &self.origin
     }
 
     /// Absolute URL for a request path (paths always start with '/').
     pub fn join(&self, path: &str) -> String {
-        format!("{}{path}", self.0)
+        format!("{}{path}", self.origin)
+    }
+
+    /// The bare host (no scheme, no port), lowercased.
+    pub fn host(&self) -> &str {
+        &self.host
     }
 }
 
@@ -279,5 +297,19 @@ mod tests {
         let base = PublicBaseUrl::new("https://example.test").unwrap();
         assert_eq!(base.join("/"), "https://example.test/");
         assert_eq!(base.join("/resume"), "https://example.test/resume");
+    }
+
+    #[test]
+    fn host_returns_the_bare_hostname() {
+        let base = PublicBaseUrl::new("https://example.test:4000").unwrap();
+        assert_eq!(base.host(), "example.test");
+    }
+
+    #[test]
+    fn host_is_lowercased_even_for_mixed_case_input() {
+        // The `url` crate normalizes a registered-name host to lowercase
+        // during parsing; this pins that behavior rather than assuming it.
+        let base = PublicBaseUrl::new("https://Example.TEST").unwrap();
+        assert_eq!(base.host(), "example.test");
     }
 }

@@ -9,6 +9,7 @@ pub mod config;
 pub mod security;
 pub mod telemetry;
 pub mod tls;
+pub mod www_redirect;
 
 pub use telemetry::{TelemetryConfig, TelemetryError, TelemetryGuard};
 
@@ -20,6 +21,7 @@ use axum::routing::get;
 use leptos::prelude::*;
 use leptos_axum::{LeptosRoutes, generate_route_list};
 use security::Hsts;
+use www_redirect::{WwwRedirect, redirect_www};
 
 /// The readiness path this server serves. The Aspire AppHost health-checks the same
 /// path, sourcing it from `ready-path` in `[workspace.metadata.orchestrator]` in the
@@ -66,6 +68,9 @@ pub fn router(
 ) -> Router {
     let routes = generate_route_list(App);
 
+    // Derived here, before `public_base_url` moves into the context closure.
+    let www_redirect = WwwRedirect::derive(public_base_url.as_ref());
+
     let traced = Router::new()
         .leptos_routes_with_context(
             &leptos_options,
@@ -89,11 +94,15 @@ pub fn router(
         .with_state(leptos_options)
         .layer(telemetry::trace_layer());
 
-    // The constant security headers wrap the whole router (outermost layer,
-    // added last), so every response carries them: SSR pages, static assets,
-    // and /readyz. The per-request CSP is set separately during SSR render.
+    // The www-redirect layer is innermost (added first), the constant
+    // security headers outermost, so a 301 still carries the constant
+    // headers. Both wrap the whole router: SSR pages, static assets, and
+    // /readyz. The per-request CSP is set separately during SSR render.
+    // A redirected www request never reaches `traced`, so it produces no
+    // spans.
     health_router()
         .merge(traced)
+        .layer(from_fn_with_state(www_redirect, redirect_www))
         .layer(from_fn_with_state(hsts, security::set_security_headers))
 }
 
