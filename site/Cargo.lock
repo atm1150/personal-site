@@ -2946,6 +2946,7 @@ dependencies = [
  "opentelemetry_sdk",
  "rcgen",
  "reqwest 0.13.4",
+ "server",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",

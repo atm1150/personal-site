@@ -6,6 +6,7 @@
 //! the app's shape is defined once, here.
 
 pub mod config;
+pub mod internal_error;
 pub mod security;
 pub mod telemetry;
 pub mod tls;
@@ -35,6 +36,13 @@ async fn readyz() -> (StatusCode, &'static str) {
     (StatusCode::OK, "ok")
 }
 
+/// Distinctive panic payload the `/__test/panic` route raises, so integration
+/// tests can prove it never reaches a response body while still seeing it in
+/// captured logs. Integration tests cannot see `#[cfg(test)]` items in this
+/// crate, hence the separate `test-util` feature instead.
+#[cfg(feature = "test-util")]
+pub const TEST_PANIC_MARKER: &str = "deliberate-test-panic-detail-marker";
+
 /// Router for the auxiliary plain-http health listener: `/readyz` and nothing else.
 ///
 /// Bound (by `main`, when `HEALTH_ADDR` is set) in addition to the site listener
@@ -58,9 +66,12 @@ pub fn health_app() -> Router {
 
 /// Assemble the application router.
 ///
-/// The Leptos routes + fallback are traced via [`telemetry::trace_layer`]; `/readyz`
-/// is mounted *outside* that layer, so the orchestrator's health poll produces no
-/// spans — the exclusion is structural, telemetry has no knowledge of the path.
+/// The Leptos routes + fallback are traced via [`telemetry::trace_layer`] and
+/// wrapped in [`internal_error::catch_panic_layer`], so a panicking handler
+/// still produces a traced response instead of dropping the connection;
+/// `/readyz` is mounted *outside* both layers, so the orchestrator's health
+/// poll produces no spans — the exclusion is structural, telemetry has no
+/// knowledge of the path.
 pub fn router(
     leptos_options: LeptosOptions,
     hsts: Hsts,
@@ -91,7 +102,24 @@ pub fn router(
             },
         )
         .fallback(leptos_axum::file_and_error_handler(shell))
-        .with_state(leptos_options)
+        .with_state(leptos_options);
+
+    // Added before the layers below so the test route is wrapped by both -
+    // a route added after `.layer(...)` would not be.
+    #[cfg(feature = "test-util")]
+    let traced = {
+        async fn test_panic() {
+            panic!("{}", TEST_PANIC_MARKER);
+        }
+        traced.route("/__test/panic", get(test_panic))
+    };
+
+    // catch_panic is innermost (added first) so a panicking handler still
+    // produces an ordinary response; trace is outermost (added last) so it
+    // observes that synthesized 500 and the responder's error event fires
+    // inside the request span.
+    let traced = traced
+        .layer(internal_error::catch_panic_layer())
         .layer(telemetry::trace_layer());
 
     // The www-redirect layer is innermost (added first), the constant

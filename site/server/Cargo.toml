@@ -5,6 +5,11 @@ edition = "2024"
 # Proprietary (see LICENSE at the repo root); never publishable to a registry.
 publish = false
 
+[features]
+# Exposes test-only items (a panic-raising route + its marker const) that
+# integration tests need but #[cfg(test)] would hide from them.
+test-util = []
+
 [dependencies]
 app = { path = "../app", default-features = false, features = ["ssr"] }
 leptos = { workspace = true, features = ["ssr"] }
@@ -33,6 +38,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "regist
 uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
+# Self dependency with test-util enabled: integration test binaries link the
+# crate through [dependencies] (default features only), so this is what
+# turns the feature on for every test target.
+server = { path = ".", features = ["test-util"] }
 # Used by the test that pins the /readyz route to the workspace metadata.
 toml = "0.9"
 # `testing` adds the in-memory span/log exporters the guard tests flush into.
