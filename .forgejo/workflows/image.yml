@@ -1,17 +1,20 @@
 name: Image
 
-# Builds the production image (Containerfile) and publishes it to the
-# instance's container registry. Runs on the host-mode label (ci-host): image
-# builds need kernel capabilities the unprivileged job containers don't have.
-# Host-mode steps run unsandboxed, so this job uses no third-party actions -
-# every step is plain shell, reviewable line by line.
+# Builds the production image (Containerfile), publishes it to the
+# instance's container registry, then scans the published image for known
+# vulnerabilities.
 #
 # Instance-specific values live in repository Actions variables/secrets, not
 # in this file: REGISTRY_HOST (registry hostname), REGISTRY_USER (account the
-# push token belongs to), REGISTRY_TOKEN (secret, package read/write scope).
+# registry tokens belong to), REGISTRY_TOKEN (secret, package read/write
+# scope, push job only), REGISTRY_PULL_TOKEN (secret, package read scope,
+# scan job only - the scanner never holds a write-capable credential).
 on:
   push:
     branches: [main]
+  # Manual runs (Actions tab / API) exercise the full pipeline from a branch
+  # before merge; the latest tag still moves only on main.
+  workflow_dispatch:
 
 # One live run per branch; a newer push cancels the superseded run.
 concurrency:
@@ -25,13 +28,21 @@ jobs:
   image:
     runs-on: ci-host
     timeout-minutes: 60
+    # The scan job consumes these instead of recomputing the name, so the two
+    # jobs can't drift apart on what was published.
+    outputs:
+      image: ${{ steps.name.outputs.image }}
+      digest: ${{ steps.push.outputs.digest }}
     steps:
       - name: Resolve image name
+        id: name
         # Image paths must be lowercase; ${VAR,,} is bash's lowercase
         # expansion. Writing to $GITHUB_ENV carries IMAGE to later steps.
         run: |
           [ -n "$REGISTRY" ] || { echo "REGISTRY_HOST variable is not set"; exit 1; }
-          echo "IMAGE=$REGISTRY/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+          image="$REGISTRY/${GITHUB_REPOSITORY,,}"
+          echo "IMAGE=$image" >> "$GITHUB_ENV"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
 
       - name: Clone at the pushed commit
         env:
@@ -69,6 +80,7 @@ jobs:
         run: podman tag "$IMAGE:$GITHUB_SHA" "$IMAGE:latest"
 
       - name: Push
+        id: push
         env:
           # The automatic per-job token authenticates but is not authorized to
           # write packages (verified: login succeeds, blob upload is denied),
@@ -81,6 +93,7 @@ jobs:
         run: |
           printf '%s' "$REGISTRY_TOKEN" | podman login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
           podman push --digestfile "$RUNNER_TEMP/digest" "$IMAGE:$GITHUB_SHA"
+          echo "digest=$(cat "$RUNNER_TEMP/digest")" >> "$GITHUB_OUTPUT"
           if [ "$GITHUB_REF" = "refs/heads/main" ]; then
             podman push "$IMAGE:latest"
           fi
@@ -107,3 +120,45 @@ jobs:
       - name: Remove registry credential
         if: always()
         run: rm -f "${{ runner.temp }}/auth.json"
+
+  scan:
+    # Report-only CVE scan of the published image, pulled by digest: findings
+    # describe the exact bytes of the push job. Containerized (ci label)
+    # so the third-party scanner stays sandboxed, holding only a read-scoped
+    # credential. Targets OS packages; the Rust dependency graph is
+    # cargo-deny's job in ci.yml.
+    needs: image
+    runs-on: ci
+    timeout-minutes: 15
+    container:
+      # Same image the ci.yml jobs pin, so the runner already has it; the
+      # scan itself needs only curl/tar. Bump alongside ci.yml + Containerfile.
+      image: rust:1.96-bookworm
+    env:
+      # Pinned + checksummed so a new trivy release can't change CI behavior
+      # on its own; bump both together (checksums ship with each release).
+      TRIVY_VERSION: "0.73.0"
+      TRIVY_SHA256: "2edd39da482bb4e9831962487b68f68e3928ec3137794757f54d00383d79547b"
+    steps:
+      - name: Install trivy
+        run: |
+          curl -fsSL -o trivy.tar.gz \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          printf '%s  trivy.tar.gz\n' "$TRIVY_SHA256" | sha256sum -c -
+          tar -xzf trivy.tar.gz -C /usr/local/bin trivy
+
+      - name: Scan image
+        env:
+          IMAGE: ${{ needs.image.outputs.image }}
+          DIGEST: ${{ needs.image.outputs.digest }}
+          TRIVY_USERNAME: ${{ vars.REGISTRY_USER }}
+          TRIVY_PASSWORD: ${{ secrets.REGISTRY_PULL_TOKEN }}
+        # --exit-code 0 is deliberate report-only policy (revisit is tracked
+        # in the issue tracker); findings surface in this job's log.
+        run: |
+          [ -n "$IMAGE" ] && [ -n "$DIGEST" ] || { echo "image job outputs are missing"; exit 1; }
+          # Registry TLS is signed by the instance's own CA; point Go's TLS
+          # stack at the CA bundle the runner already injects for git.
+          export SSL_CERT_FILE="$GIT_SSL_CAINFO"
+          [ -f "$SSL_CERT_FILE" ] || { echo "CA bundle not found via GIT_SSL_CAINFO"; exit 1; }
+          trivy image --no-progress --exit-code 0 "$IMAGE@$DIGEST"
