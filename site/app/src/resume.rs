@@ -1,6 +1,5 @@
 use crate::meta::{MetaDescription, MetaTitle, PageMeta, PageMetaTags};
 use leptos::prelude::*;
-use singlestage::Card;
 
 /// The resume as a first-class app route.
 #[component]
@@ -16,7 +15,7 @@ pub fn ResumePage() -> impl IntoView {
             image: None,
         }/>
         <div class="resume-page">
-            <Card class="resume-card">
+            <div class="resume-frame">
                 // sticky download link
                 <a class="no-print" href="/Andrew-Miller-Resume.pdf" download="" rel="external">
                     "Download PDF"
@@ -140,7 +139,7 @@ pub fn ResumePage() -> impl IntoView {
                         </section>
                     </div>
                 </div>
-            </Card>
+            </div>
         </div>
     }
 }

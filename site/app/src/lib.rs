@@ -3,14 +3,17 @@ pub mod error_template;
 pub mod errors;
 pub mod meta;
 pub mod resume;
+pub mod shell;
+pub mod theme;
 
 use leptos::prelude::*;
-use leptos_meta::{MetaTags, Stylesheet, provide_meta_context};
+use leptos_meta::{Html, MetaTags, Stylesheet, provide_meta_context};
 use leptos_router::{
     StaticSegment,
     components::{Route, Router, Routes},
 };
 use resume::ResumePage;
+use shell::{MAIN_CONTENT_ID, SiteFooter, SiteHeader, SkipLink};
 use singlestage::ThemeProvider;
 
 /// This shell function is used to generate the placeholder html that provides the base index.html
@@ -70,13 +73,20 @@ pub fn App() -> impl IntoView {
 
     view! {
         <Stylesheet id="leptos" href="/pkg/portfolio.css"/>
+        // leptos_meta manages <html> during hydration and drops the attribute
+        // set in the SSR shell, so lang is re-asserted here (axe: html-has-lang).
+        <Html attr:lang="en"/>
 
         // ThemeProvider is load-bearing beyond theming: it injects singlestage's
         // compiled component CSS (a <style> tag) into the page. Components render
-        // unstyled without it.
-        <ThemeProvider>
+        // unstyled without it. The theme argument carries the site palette; in
+        // the default auto mode it emits light at :root and dark inside a
+        // prefers-color-scheme media query.
+        <ThemeProvider theme=theme::SLATE_BRONZE>
             <Router>
-                <main>
+                <SkipLink/>
+                <SiteHeader/>
+                <main id=MAIN_CONTENT_ID>
                     <Routes fallback=|| {
                         let mut errors = Errors::default();
                         errors.insert_with_default_key(crate::errors::AppError::NotFound);
@@ -86,6 +96,7 @@ pub fn App() -> impl IntoView {
                         <Route path=StaticSegment("resume") view=ResumePage/>
                     </Routes>
                 </main>
+                <SiteFooter/>
             </Router>
         </ThemeProvider>
     }
@@ -104,7 +115,9 @@ fn HomePage() -> impl IntoView {
     };
     view! {
         <crate::meta::PageMetaTags meta/>
-        <h1>"Portfolio"</h1>
-        <p><a href="/resume">"Résumé"</a></p>
+        <div class="prose">
+            <h1>"Portfolio"</h1>
+            <p><a href="/resume">"Résumé"</a></p>
+        </div>
     }
 }

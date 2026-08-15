@@ -16,31 +16,227 @@
   font-display: swap;
 }
 
-/* Placeholder css */
-body {
+/* Cascade order, declared before any rule so it does not depend on which
+   stylesheet the browser parses first: the five leading names are
+   singlestage's own layers, and the site layers come last, so a site rule
+   beats a singlestage rule of equal specificity. Colors are NOT defined here
+   - <ThemeProvider> injects them as custom properties (see app/src/theme.rs)
+   and this file only ever reads them through var(). */
+@layer properties, theme, base, components, utilities,
+       site-base, site-layout, site-pages;
+
+@layer site-base {
+  /* singlestage's preflight zeroes margins, unsizes headings, and strips list
+     bullets, so document semantics are restored here rather than inherited. */
+  body {
     margin: 0;
-    font-family: sans-serif;
-    text-align: center;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    font-family: var(--font-sans);
+    background: var(--background);
+    color: var(--foreground);
+  }
+
+  h1, h2, h3, h4 {
+    line-height: 1.2;
+    margin: 0 0 var(--space-2);
+    text-wrap: balance;
+  }
+  /* Bronze carries the heading hierarchy; body text stays neutral. h1 scales
+     with the viewport so long titles do not overflow a phone. */
+  h1 {
+    font-size: clamp(1.953rem, 1.4rem + 2.2vw, var(--ratio-h1));
+    font-weight: 650;
+    color: var(--site-heading);
+  }
+  h2 { font-size: var(--ratio-h2); font-weight: 600; color: var(--site-heading); }
+  h3 { font-size: var(--ratio-h3); font-weight: 600; }
+  h4 { font-size: var(--ratio-h4); font-weight: 600; }
+  h2, h3, h4 { margin-top: var(--space-4); }
+
+  p { margin: 0 0 var(--space-2); }
+
+  code, kbd, samp, pre {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+  }
+  code {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.1em 0.35em;
+  }
+
+  /* Keyboard focus is bronze and offset so it reads against any surface.
+     :focus-visible (not :focus) keeps it off mouse clicks. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  /* Nothing on the site animates; the only transition is a color fade on
+     links, and this removes even that for readers who ask. singlestage's base
+     layer also sets scroll-behavior: smooth, which is motion this undoes. */
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
+  }
 }
 
-/* singlestage's <ThemeProvider> injects a stylesheet that includes Tailwind
-   preflight, a global reset (margins/padding zeroed, headings unsized, list
-   bullets stripped). It lives in a cascade @layer, so these unlayered rules
-   win wherever both apply - but pages relying on browser defaults need them
-   restored explicitly. */
-h1 { font-size: 2em; font-weight: bold; margin: 0.67em 0; }
-p { margin: 1em 0; }
+@layer site-layout {
+  /* Header, main, and footer all align to one column width. */
+  .shell-row {
+    max-width: var(--shell-max);
+    margin: 0 auto;
+    padding: 0 var(--space-3);
+    width: 100%;
+  }
 
-/* ---- Error / not-found page ----
-   Scoped root class fed by ErrorTemplate (Routes fallback synthesizes a 404).
-   Inherits the theme via ThemeProvider; centered by the body default above. */
-.not-found-page {
-  max-width: 36rem;
-  margin: 4rem auto;
-  padding: 0 1.5rem;
+  /* Visually hidden until focused - the standard clip-path technique rather
+     than display:none, which would take it out of the focus order entirely. */
+  .skip-link {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .skip-link:focus-visible {
+    position: fixed;
+    top: var(--space-1);
+    left: var(--space-1);
+    z-index: 100;
+    width: auto;
+    height: auto;
+    clip-path: none;
+    padding: var(--space-1) var(--space-2);
+    background: var(--primary);
+    color: var(--primary-foreground);
+    border-radius: var(--radius);
+    text-decoration: none;
+  }
+
+  /* Tier 3: header and footer sit on a bronze-tinted band, closed by a
+     hairline bronze rule. 1px is a deliberate carve-out from the rem/em rule -
+     a hairline should not scale with the root font size. */
+  .site-header,
+  .site-footer {
+    background: var(--site-band);
+    color: var(--site-band-foreground);
+  }
+  .site-header { border-bottom: 1px solid var(--site-rule); }
+  .site-footer { border-top: 1px solid var(--site-rule); }
+
+  .site-header .shell-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-1) var(--space-3);
+    padding-block: var(--space-2);
+  }
+
+  .wordmark {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--site-link);
+    text-decoration: none;
+  }
+
+  /* Nav links carry no underline at rest: link-ness comes from the <nav>
+     landmark and header position, not from color alone. Prose links inside
+     running text are underlined (see .prose below), which is where WCAG 1.4.1
+     actually engages. */
+  .site-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+  .site-nav a,
+  .site-footer a {
+    color: var(--site-link);
+    text-decoration: none;
+    transition: color 150ms ease;
+  }
+  .site-nav a:hover,
+  .site-nav a:focus-visible,
+  .site-footer a:hover,
+  .site-footer a:focus-visible {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  /* The active route is marked by weight, not by color alone. */
+  .site-nav a[aria-current="page"] { font-weight: 600; }
+
+  main {
+    flex: 1;
+    width: 100%;
+    max-width: var(--shell-max);
+    margin: 0 auto;
+    padding: var(--space-5) var(--space-3);
+  }
+  .site-footer .shell-row {
+    padding-block: var(--space-2);
+    color: var(--muted-foreground);
+    font-size: 0.9rem;
+  }
+  .site-footer p { margin: 0; }
+  .site-footer .sep { margin: 0 0.5em; }
+
+  /* Long-form text: capped measure, looser leading, underlined links. */
+  .prose {
+    max-width: var(--measure);
+    font-size: var(--text-body);
+    line-height: var(--line-body);
+  }
+  .prose a {
+    color: var(--site-link);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    transition: color 150ms ease;
+  }
+  .prose ul, .prose ol {
+    margin: 0 0 var(--space-2) var(--space-3);
+    list-style: disc;
+  }
+  .prose ol { list-style: decimal; }
+  .prose li { margin-bottom: 0.35em; }
+  .prose li::marker { color: var(--site-link); }
+  .prose blockquote {
+    margin: var(--space-2) 0;
+    padding-left: var(--space-2);
+    border-left: 3px solid var(--site-rule);
+    color: var(--muted-foreground);
+    font-style: italic;
+  }
+
+  /* The shell is screen furniture; the resume page is what gets printed. */
+  @media print {
+    .site-header, .site-footer, .skip-link { display: none; }
+    main { max-width: none; margin: 0; padding: 0; }
+  }
+}
+
+@layer site-pages {
+  /* Error / not-found page. Scoped root class fed by ErrorTemplate (the Routes
+     fallback synthesizes a 404); inherits the shell like any other route. */
+  .not-found-page {
+    max-width: var(--measure);
+  }
 }
 
 /* ---- Resume page (/resume) ----
+   Deliberately left unlayered: unlayered rules beat every layer, which is the
+   precedence this block already shipped with. Moving it into site-pages would
+   change its cascade position against singlestage's component layer, and that
+   is a visual regression risk on finished work - migrate it separately, with
+   a browser check.
+
    Scoped under .resume-page so the rules live in the single site bundle
    without leaking into other pages. The @media print block at the bottom
    is what shapes the downloadable PDF: it is produced by manually printing
@@ -64,15 +260,16 @@ p { margin: 1em 0; }
 
 .resume-page * { box-sizing: border-box; }
 
-/* Three layers: the themed body background, the Card as a theme-aware frame
-   (its bg-card/border/rounded-xl/shadow tokens kept - dark in dark mode), and
-   inside it the resume sheet (.page) - a document, so paper-white and
-   ink-colored in ANY theme. */
-.resume-page .resume-card {
+/* Two layers: the themed page background, and the resume sheet (.page) - a
+   document, so paper-white and ink-colored in ANY theme. The frame between
+   them carries no surface of its own; it only sets the column width and gives
+   the sticky download link something to align against. */
+.resume-page .resume-frame {
+  display: flex;
+  flex-direction: column;
   max-width: calc(8.5in + 48px);
   margin: 32px auto;
   padding: 24px;
-  gap: 0;
 }
 
 .resume-page .page {
@@ -84,8 +281,10 @@ p { margin: 1em 0; }
 }
 
 /* ---- Download button (screen only) ----
-   First child of the card frame: flex-end aligns it to the card's right
-   edge, sticky keeps it visible while the card scrolls */
+   First child of the frame: flex-end aligns it to the frame's right edge,
+   sticky keeps it visible while the sheet scrolls. Unlike the sheet, this is
+   site chrome rather than part of the printed document, so it takes the site
+   palette instead of the resume's ink colors. */
 .resume-page .no-print {
   position: sticky;
   top: 16px;
@@ -93,17 +292,20 @@ p { margin: 1em 0; }
   margin-bottom: 16px;
   z-index: 10;
   padding: 8px 16px;
-  background: var(--accent);
-  color: #fff;
+  background: var(--primary);
+  color: var(--primary-foreground);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius);
   font: inherit;
   font-weight: 600;
   text-decoration: none;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
-.resume-page .no-print:hover { background: #1d4ed8; }
+.resume-page .no-print:hover {
+  /* Darkens in light mode and lightens in dark, without a second token. */
+  background: color-mix(in oklab, var(--primary) 85%, var(--foreground));
+}
 
 /* ---- Masthead ---- */
 .resume-page .masthead {
@@ -116,6 +318,11 @@ p { margin: 1em 0; }
   font-size: 27pt;
   font-weight: 700;
   letter-spacing: 0.4px;
+  /* The site's h1 rule colors headings bronze. A color set on the element
+     beats one inherited from .masthead, so this heading needs to opt back in
+     to the masthead's own color - the resume sheet is a document and keeps
+     its ink, not the site palette. */
+  color: inherit;
 }
 .resume-page .role {
   margin: 5px 0 12px;
@@ -194,7 +401,7 @@ p { margin: 1em 0; }
   }
   .resume-page { background: #fff; font-size: 10pt; line-height: 1.38; }
 
-  .resume-page .resume-card { max-width: none; margin: 0; padding: 0; background: #fff; border: none; border-radius: 0; box-shadow: none; }
+  .resume-page .resume-frame { max-width: none; margin: 0; padding: 0; }
   .resume-page .page { max-width: none; margin: 0; box-shadow: none; }
 
   /* The download control is a screen affordance; never print it. */

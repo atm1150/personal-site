@@ -26,6 +26,7 @@ cfg-if = "1.0.0"
 # Component library (shadcn/Basecoat port for Leptos). Feature-per-component:
 # enable only what the app uses. theme_provider is required - <ThemeProvider>
 # is what injects the compiled component CSS into the page.
+# "card" is unused; singlestage 0.4.1 does not seem to build without a component feature of some kind enabled.
 singlestage = { version = "0.4.1", default-features = false, features = ["card", "theme_provider"] }
 console_error_panic_hook = "0.1.7"
 console_log = "1.0.0"

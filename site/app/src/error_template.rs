@@ -33,7 +33,7 @@ pub fn ErrorTemplate(#[prop(into)] errors: Signal<Errors>) -> impl IntoView {
 
     view! {
         <Title text="Page not found"/>
-        <div class="not-found-page">
+        <div class="not-found-page prose">
             {move || {
                 errors
                     .get()
