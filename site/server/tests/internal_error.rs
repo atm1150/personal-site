@@ -20,15 +20,17 @@ use server::security::Hsts;
 
 const PANIC_ROUTE: &str = "/__test/panic";
 
-/// All four tests below drive the same panic route, whose panic-response
-/// handler shares one `tracing` callsite. A callsite's first hit caches its
-/// interest computed from the registry of *registered* dispatchers - empty
-/// until the capturing test constructs its subscriber, and an empty registry
-/// caches Interest::never. Registration does rebuild every known callsite,
-/// so serial orderings self-heal; the flake is concurrent: a first-hitting
-/// test computes `never` against a pre-registration snapshot and can store
-/// it after the rebuild already ran, so the capturing test's event is
-/// skipped. Serializing access removes the overlap.
+/// Ensures the `tracing::error!` callsite is never first-hit with no subscriber,
+/// which would cache `Interest::never` permanently — `set_default` is thread-local
+/// and does not trigger a callsite rebuild, so that cache cannot be recovered.
+fn ensure_global_subscriber() {
+    let _ = tracing_subscriber::fmt()
+        .with_writer(std::io::sink)
+        .try_init();
+}
+
+/// Serializes access to the panic route so tests don't race on the shared
+/// `SharedBuf` state in `panic_detail_is_captured_internally`.
 static PANIC_ROUTE_ACCESS: Mutex<()> = Mutex::new(());
 
 fn serialize_panic_route_access() -> std::sync::MutexGuard<'static, ()> {
@@ -39,6 +41,7 @@ fn serialize_panic_route_access() -> std::sync::MutexGuard<'static, ()> {
 
 #[tokio::test]
 async fn panic_returns_generic_500_page() {
+    ensure_global_subscriber();
     let _serialize = serialize_panic_route_access();
     let response = common::get(test_router(Hsts::Off), PANIC_ROUTE).await;
 
@@ -64,6 +67,7 @@ async fn panic_returns_generic_500_page() {
 /// must never reach the client, only the generic page.
 #[tokio::test]
 async fn panic_detail_never_reaches_the_response() {
+    ensure_global_subscriber();
     let _serialize = serialize_panic_route_access();
     let response = common::get(test_router(Hsts::Off), PANIC_ROUTE).await;
     let html = body_string(response).await;
@@ -75,6 +79,7 @@ async fn panic_detail_never_reaches_the_response() {
 
 #[tokio::test]
 async fn panic_response_carries_security_headers() {
+    ensure_global_subscriber();
     let _serialize = serialize_panic_route_access();
     let response = common::get(test_router(Hsts::Off), PANIC_ROUTE).await;
     let headers = response.headers().clone();
@@ -138,6 +143,7 @@ impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for SharedBuf {
 /// keeps the handler on the same thread as the thread-local subscriber guard.
 #[tokio::test]
 async fn panic_detail_is_captured_internally() {
+    ensure_global_subscriber();
     let _serialize = serialize_panic_route_access();
 
     let buf = SharedBuf::default();
