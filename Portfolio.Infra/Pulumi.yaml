@@ -1,0 +1,3 @@
+name: portfolio-infra
+runtime: dotnet
+description: Production hosting infrastructure for the portfolio site.

@@ -8,6 +8,10 @@ Portfolio.Orchestrator/bin/
 Portfolio.Orchestrator/obj/
 Portfolio.Orchestrator.Tests/bin/
 Portfolio.Orchestrator.Tests/obj/
+Portfolio.Infra/bin/
+Portfolio.Infra/obj/
+Portfolio.Infra.Tests/bin/
+Portfolio.Infra.Tests/obj/
 .aspire/
 *.user
 

@@ -1,0 +1,6 @@
+config:
+  portfolio-infra:region: sfo3
+  portfolio-infra:dropletSize: s-1vcpu-1gb
+  portfolio-infra:dropletImage: debian-13-x64
+  portfolio-infra:dropletName: portfolio-site
+  portfolio-infra:dropletTag: portfolio

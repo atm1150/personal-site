@@ -104,3 +104,11 @@ jobs:
         run: dotnet build Portfolio.Orchestrator.Tests/Portfolio.Orchestrator.Tests.csproj -warnaserror
       - name: test
         run: dotnet test Portfolio.Orchestrator.Tests/Portfolio.Orchestrator.Tests.csproj --no-build
+      - name: format (Infra)
+        run: dotnet format Portfolio.Infra/Portfolio.Infra.csproj --verify-no-changes
+      - name: format (Infra Tests)
+        run: dotnet format Portfolio.Infra.Tests/Portfolio.Infra.Tests.csproj --verify-no-changes
+      - name: build (Infra, warnaserror)
+        run: dotnet build Portfolio.Infra.Tests/Portfolio.Infra.Tests.csproj -warnaserror
+      - name: test (Infra)
+        run: dotnet test Portfolio.Infra.Tests/Portfolio.Infra.Tests.csproj --no-build
