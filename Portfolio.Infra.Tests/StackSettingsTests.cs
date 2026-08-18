@@ -113,8 +113,12 @@ public class StackSettingsTests
             .WithNamingConvention(NullNamingConvention.Instance)
             .Build();
 
-        var root = deserializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(yaml);
-        return root.TryGetValue("config", out var config) ? config : new Dictionary<string, string>();
+        // Pulumi owns top-level scalar entries (e.g. encryptionsalt); only the config mapping is under contract.
+        var root = deserializer.Deserialize<Dictionary<string, object>>(yaml);
+        if (!root.TryGetValue("config", out var section) || section is not IDictionary<object, object> config)
+            return new Dictionary<string, string>();
+
+        return config.ToDictionary(kv => (string)kv.Key, kv => kv.Value?.ToString() ?? string.Empty);
     }
 
     [Fact]

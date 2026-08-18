@@ -1,3 +1,4 @@
+encryptionsalt: v1:vHAxP5L1v8A=:v1:TaxFi8+SqN83I2T9:RAAyfyUfWjjBvdHgcr2M4Em9A2iIcw==
 config:
   portfolio-infra:region: sfo3
   portfolio-infra:dropletSize: s-1vcpu-1gb
