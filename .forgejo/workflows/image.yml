@@ -1,8 +1,8 @@
 name: Image
 
 # Builds the production image (Containerfile), publishes it to the
-# instance's container registry, then scans the published image for known
-# vulnerabilities.
+# instance's container registry, scans the published image for known
+# vulnerabilities, and (on main) deploys it to the production droplet.
 #
 # Instance-specific values live in repository Actions variables/secrets, not
 # in this file: REGISTRY_HOST (registry hostname), REGISTRY_USER (account the
@@ -162,3 +162,124 @@ jobs:
           export SSL_CERT_FILE="$GIT_SSL_CAINFO"
           [ -f "$SSL_CERT_FILE" ] || { echo "CA bundle not found via GIT_SSL_CAINFO"; exit 1; }
           trivy image --no-progress --exit-code 0 "$IMAGE@$DIGEST"
+
+  deploy:
+    # Ships the published image to the production droplet and restarts the
+    # site there. Push-only: the runner connects out to the droplet; the
+    # droplet never holds a registry credential or reaches the registry.
+    # Instance values: DEPLOY_HOST (droplet address), DEPLOY_HOST_KEY (the
+    # droplet's full known_hosts line, pinned so CI never trusts a host key
+    # on first use), DEPLOY_SSH_KEY (secret, the droplet root key).
+    needs: image
+    if: github.ref == 'refs/heads/main' && vars.DEPLOY_HOST != ''
+    runs-on: ci-host
+    timeout-minutes: 15
+    env:
+      IMAGE: ${{ needs.image.outputs.image }}
+      DIGEST: ${{ needs.image.outputs.digest }}
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+    steps:
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST_KEY: ${{ vars.DEPLOY_HOST_KEY }}
+        # Later steps source ssh.env for a run_ssh helper with the key and
+        # pinned host key baked in.
+        run: |
+          [ -n "$DEPLOY_SSH_KEY" ] || { echo "DEPLOY_SSH_KEY secret is not set"; exit 1; }
+          [ -n "$DEPLOY_HOST_KEY" ] || { echo "DEPLOY_HOST_KEY variable is not set"; exit 1; }
+          umask 077
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$RUNNER_TEMP/deploy_key"
+          printf '%s\n' "$DEPLOY_HOST_KEY" > "$RUNNER_TEMP/known_hosts"
+          cat > "$RUNNER_TEMP/ssh.env" <<'EOF'
+          run_ssh() {
+            ssh -i "$RUNNER_TEMP/deploy_key" \
+              -o UserKnownHostsFile="$RUNNER_TEMP/known_hosts" \
+              -o StrictHostKeyChecking=yes \
+              "root@$DEPLOY_HOST" "$@"
+          }
+          EOF
+
+      - name: Clone at the pushed commit
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        # Same host-mode clone as the image job (askpass, no actions/checkout);
+        # the deploy needs the quadlet file at the exact deployed commit.
+        run: |
+          cat > "$RUNNER_TEMP/askpass.sh" <<'EOF'
+          #!/bin/sh
+          case "$1" in
+            Username*) echo "x-access-token" ;;
+            *) echo "$GITHUB_TOKEN" ;;
+          esac
+          EOF
+          chmod +x "$RUNNER_TEMP/askpass.sh"
+          export GIT_ASKPASS="$RUNNER_TEMP/askpass.sh"
+          unset GIT_SSL_CAINFO
+          rm -rf src
+          git init -q src
+          git -C src remote add origin "${{ github.server_url }}/${{ github.repository }}.git"
+          git -C src fetch -q --depth 1 origin "$GITHUB_SHA"
+          git -C src checkout -q FETCH_HEAD
+
+      - name: Prepare droplet
+        # Idempotent bootstrap: asserts the desired droplet state and changes
+        # only what differs, so the first run is setup and later runs are
+        # no-op checks. Rootless runtime, root-managed: the quadlet lives in
+        # /etc/containers/systemd/users/<uid> and runs as the site user.
+        run: |
+          . "$RUNNER_TEMP/ssh.env"
+          run_ssh bash -s <<'EOF'
+          set -eu
+          export DEBIAN_FRONTEND=noninteractive
+          command -v podman >/dev/null || { apt-get -qq update && apt-get -qq install -y podman; }
+          id site >/dev/null 2>&1 || useradd --create-home --shell /usr/sbin/nologin site
+          loginctl enable-linger site
+          printf 'net.ipv4.ip_unprivileged_port_start=80\n' > /etc/sysctl.d/50-unprivileged-ports.conf
+          sysctl -q -p /etc/sysctl.d/50-unprivileged-ports.conf
+          install -d -m 0750 /etc/portfolio /etc/portfolio/certs
+          printf 'PasswordAuthentication no\n' > /etc/ssh/sshd_config.d/50-no-passwords.conf
+          sshd -t && systemctl reload ssh
+          install -d "/etc/containers/systemd/users/$(id -u site)"
+          EOF
+          uid=$(run_ssh id -u site)
+          run_ssh "cat > /etc/containers/systemd/users/$uid/portfolio-site.container" \
+            < src/deploy/portfolio-site.container
+          run_ssh "systemctl --user --machine=site@.host daemon-reload"
+
+      - name: Ship image to droplet
+        env:
+          REGISTRY_USER: ${{ vars.REGISTRY_USER }}
+          REGISTRY_PULL_TOKEN: ${{ secrets.REGISTRY_PULL_TOKEN }}
+          REGISTRY_AUTH_FILE: ${{ runner.temp }}/auth.json
+        # The registry manifest digest does not survive save/load; the image
+        # ID (config digest) does, and pins the same filesystem content, so
+        # it is the cross-machine comparator.
+        run: |
+          . "$RUNNER_TEMP/ssh.env"
+          printf '%s' "$REGISTRY_PULL_TOKEN" | podman login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
+          podman pull -q "$IMAGE@$DIGEST"
+          image_id=$(podman image inspect --format '{{.Id}}' "$IMAGE@$DIGEST")
+          uid=$(run_ssh id -u site)
+          sp="runuser -u site -- env XDG_RUNTIME_DIR=/run/user/$uid podman"
+          run_ssh "! $sp image exists localhost/portfolio-site:current || $sp tag localhost/portfolio-site:current localhost/portfolio-site:previous"
+          podman save --format oci-archive "$IMAGE@$DIGEST" | run_ssh "$sp load -q"
+          run_ssh "$sp tag $image_id localhost/portfolio-site:current"
+          landed=$(run_ssh "$sp image inspect --format '{{.Id}}' localhost/portfolio-site:current")
+          echo "pushed image id: $image_id"
+          echo "landed image id: $landed"
+          [ -n "$landed" ] && [ "$landed" = "$image_id" ]
+
+      - name: Restart and verify
+        run: |
+          . "$RUNNER_TEMP/ssh.env"
+          run_ssh "systemctl --user --machine=site@.host restart portfolio-site.service"
+          curl -fsS --retry 30 --retry-delay 2 --retry-all-errors -o /dev/null "http://$DEPLOY_HOST/readyz"
+          echo "deploy verified: /readyz returned 200"
+          # Drop images that lost their last tag in the :previous rotation.
+          uid=$(run_ssh id -u site)
+          run_ssh "runuser -u site -- env XDG_RUNTIME_DIR=/run/user/$uid podman image prune -f"
+
+      - name: Remove credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/deploy_key" "$RUNNER_TEMP/known_hosts" "$RUNNER_TEMP/auth.json"

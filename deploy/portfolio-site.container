@@ -1,0 +1,14 @@
+# Rootless quadlet for the site; the deploy job installs it to
+# /etc/containers/systemd/users/<uid of site>/.
+[Container]
+Image=localhost/portfolio-site:current
+PublishPort=80:8080
+Environment=LEPTOS_ENV=PROD
+Environment=PUBLIC_BASE_URL=https://atmiller.org
+Environment=SITE_TLS=off
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

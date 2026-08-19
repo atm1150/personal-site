@@ -11,19 +11,23 @@ public class InfraConfigTests : IDisposable
     // Stash and restore env vars so tests don't bleed into each other.
     private readonly string? _savedAdminIp;
     private readonly string? _savedSshKey;
+    private readonly string? _savedDeploySshKey;
 
     public InfraConfigTests()
     {
         _savedAdminIp = Environment.GetEnvironmentVariable(InfraConfig.AdminIpVar);
         _savedSshKey = Environment.GetEnvironmentVariable(InfraConfig.SshPublicKeyVar);
+        _savedDeploySshKey = Environment.GetEnvironmentVariable(InfraConfig.DeploySshPublicKeyVar);
         Environment.SetEnvironmentVariable(InfraConfig.AdminIpVar, null);
         Environment.SetEnvironmentVariable(InfraConfig.SshPublicKeyVar, null);
+        Environment.SetEnvironmentVariable(InfraConfig.DeploySshPublicKeyVar, null);
     }
 
     public void Dispose()
     {
         Environment.SetEnvironmentVariable(InfraConfig.AdminIpVar, _savedAdminIp);
         Environment.SetEnvironmentVariable(InfraConfig.SshPublicKeyVar, _savedSshKey);
+        Environment.SetEnvironmentVariable(InfraConfig.DeploySshPublicKeyVar, _savedDeploySshKey);
     }
 
     // --- RequireAdminIp ---
@@ -103,6 +107,37 @@ public class InfraConfigTests : IDisposable
         Environment.SetEnvironmentVariable(InfraConfig.SshPublicKeyVar, key);
 
         var result = InfraConfig.RequireSshPublicKey();
+
+        Assert.Equal(key, result);
+    }
+
+    // --- RequireDeploySshPublicKey ---
+
+    [Fact]
+    public void RequireDeploySshPublicKey_WhenUnset_ThrowsNamingVariable()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() => InfraConfig.RequireDeploySshPublicKey());
+
+        Assert.Contains(InfraConfig.DeploySshPublicKeyVar, ex.Message);
+    }
+
+    [Fact]
+    public void RequireDeploySshPublicKey_WhenEmpty_ThrowsNamingVariable()
+    {
+        Environment.SetEnvironmentVariable(InfraConfig.DeploySshPublicKeyVar, "");
+
+        var ex = Assert.Throws<InvalidOperationException>(() => InfraConfig.RequireDeploySshPublicKey());
+
+        Assert.Contains(InfraConfig.DeploySshPublicKeyVar, ex.Message);
+    }
+
+    [Fact]
+    public void RequireDeploySshPublicKey_WhenSet_ReturnsValue()
+    {
+        var key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDeploy ci-deploy";
+        Environment.SetEnvironmentVariable(InfraConfig.DeploySshPublicKeyVar, key);
+
+        var result = InfraConfig.RequireDeploySshPublicKey();
 
         Assert.Equal(key, result);
     }

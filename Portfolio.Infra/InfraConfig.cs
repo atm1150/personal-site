@@ -10,6 +10,7 @@ internal static class InfraConfig
 {
     internal const string AdminIpVar = "INFRA_ADMIN_IP";
     internal const string SshPublicKeyVar = "INFRA_SSH_PUBLIC_KEY";
+    internal const string DeploySshPublicKeyVar = "INFRA_DEPLOY_SSH_PUBLIC_KEY";
 
     /// <summary>
     /// Returns the admin IPv4 address from <see cref="AdminIpVar"/>.
@@ -31,16 +32,24 @@ internal static class InfraConfig
     }
 
     /// <summary>
-    /// Returns the SSH public key text from <see cref="SshPublicKeyVar"/>.
+    /// Returns the admin SSH public key text from <see cref="SshPublicKeyVar"/>.
     /// Throws <see cref="InvalidOperationException"/> if unset or empty.
     /// </summary>
-    internal static string RequireSshPublicKey()
+    internal static string RequireSshPublicKey() => RequireNonEmpty(SshPublicKeyVar);
+
+    /// <summary>
+    /// Returns the CI deploy SSH public key text from <see cref="DeploySshPublicKeyVar"/>.
+    /// Throws <see cref="InvalidOperationException"/> if unset or empty.
+    /// </summary>
+    internal static string RequireDeploySshPublicKey() => RequireNonEmpty(DeploySshPublicKeyVar);
+
+    private static string RequireNonEmpty(string name)
     {
-        var raw = Environment.GetEnvironmentVariable(SshPublicKeyVar);
+        var raw = Environment.GetEnvironmentVariable(name);
 
         if (string.IsNullOrWhiteSpace(raw))
             throw new InvalidOperationException(
-                $"Environment variable {SshPublicKeyVar} is required but not set.");
+                $"Environment variable {name} is required but not set.");
 
         return raw;
     }

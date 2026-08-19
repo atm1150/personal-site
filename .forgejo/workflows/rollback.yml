@@ -1,0 +1,56 @@
+name: Rollback
+
+# Manual safety valve: points the droplet back at the previously deployed
+# image and restarts the site. No build or registry involved - the previous
+# image is already on the droplet under the :previous tag. Instance values
+# are the deploy job's: DEPLOY_HOST, DEPLOY_HOST_KEY, DEPLOY_SSH_KEY.
+on:
+  workflow_dispatch:
+
+jobs:
+  rollback:
+    if: vars.DEPLOY_HOST != ''
+    runs-on: ci-host
+    timeout-minutes: 10
+    env:
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+    steps:
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST_KEY: ${{ vars.DEPLOY_HOST_KEY }}
+        run: |
+          [ -n "$DEPLOY_SSH_KEY" ] || { echo "DEPLOY_SSH_KEY secret is not set"; exit 1; }
+          [ -n "$DEPLOY_HOST_KEY" ] || { echo "DEPLOY_HOST_KEY variable is not set"; exit 1; }
+          umask 077
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$RUNNER_TEMP/deploy_key"
+          printf '%s\n' "$DEPLOY_HOST_KEY" > "$RUNNER_TEMP/known_hosts"
+          cat > "$RUNNER_TEMP/ssh.env" <<'EOF'
+          run_ssh() {
+            ssh -i "$RUNNER_TEMP/deploy_key" \
+              -o UserKnownHostsFile="$RUNNER_TEMP/known_hosts" \
+              -o StrictHostKeyChecking=yes \
+              "root@$DEPLOY_HOST" "$@"
+          }
+          EOF
+
+      - name: Swap to previous image and restart
+        # Reads both image IDs first, then reassigns both tags - no temp tag,
+        # and the swap is a rollback in either direction.
+        run: |
+          . "$RUNNER_TEMP/ssh.env"
+          uid=$(run_ssh id -u site)
+          sp="runuser -u site -- env XDG_RUNTIME_DIR=/run/user/$uid podman"
+          run_ssh "$sp image exists localhost/portfolio-site:previous" \
+            || { echo "no previous image on the droplet; nothing to roll back to"; exit 1; }
+          cur=$(run_ssh "$sp image inspect --format '{{.Id}}' localhost/portfolio-site:current")
+          prev=$(run_ssh "$sp image inspect --format '{{.Id}}' localhost/portfolio-site:previous")
+          run_ssh "$sp tag $prev localhost/portfolio-site:current"
+          run_ssh "$sp tag $cur localhost/portfolio-site:previous"
+          run_ssh "systemctl --user --machine=site@.host restart portfolio-site.service"
+          curl -fsS --retry 30 --retry-delay 2 --retry-all-errors -o /dev/null "http://$DEPLOY_HOST/readyz"
+          echo "rollback verified: /readyz returned 200, serving image $prev"
+
+      - name: Remove credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/deploy_key" "$RUNNER_TEMP/known_hosts"

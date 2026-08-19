@@ -10,11 +10,20 @@ return await Deployment.RunAsync(() =>
 
     var adminIp = InfraConfig.RequireAdminIp();
     var sshPublicKey = InfraConfig.RequireSshPublicKey();
+    var deploySshPublicKey = InfraConfig.RequireDeploySshPublicKey();
 
+    // admin key
     var sshKey = new SshKey("portfolio-ssh-key", new SshKeyArgs
     {
-        Name = "portfolio-deploy-key",
+        Name = "portfolio-admin-key",
         PublicKey = sshPublicKey,
+    });
+
+    // machine deploy key
+    var deployKey = new SshKey("portfolio-ci-deploy-key", new SshKeyArgs
+    {
+        Name = "portfolio-ci-deploy-key",
+        PublicKey = deploySshPublicKey,
     });
 
     // Slug verified against DigitalOcean's image list at first preview.
@@ -24,7 +33,7 @@ return await Deployment.RunAsync(() =>
         Size = settings.DropletSize,
         Image = settings.DropletImage,
         Region = settings.Region,
-        SshKeys = new InputList<string> { sshKey.Id },
+        SshKeys = new InputList<string> { sshKey.Id, deployKey.Id },
         Monitoring = true,
         Ipv6 = false,
         Tags = new InputList<string> { settings.DropletTag },
