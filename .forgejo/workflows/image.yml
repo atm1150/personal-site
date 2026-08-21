@@ -270,9 +270,13 @@ jobs:
           podman pull -q "$IMAGE@$DIGEST"
           image_id=$(podman image inspect --format '{{.Id}}' "$IMAGE@$DIGEST")
           uid=$(run_ssh id -u site)
-          sp="runuser -u site -- env XDG_RUNTIME_DIR=/run/user/$uid podman"
+          # -C /: escape root's 0700 home before podman's rootless re-exec
+          # chdirs back into it as site. -u: drop root's session bus (podman
+          # finds site's own via XDG_RUNTIME_DIR) and the SSH_* variables
+          # naming the admin connection's source address.
+          sp="runuser -u site -- env -C / -u DBUS_SESSION_BUS_ADDRESS -u SSH_CLIENT -u SSH_CONNECTION XDG_RUNTIME_DIR=/run/user/$uid podman"
           run_ssh "! $sp image exists localhost/portfolio-site:current || $sp tag localhost/portfolio-site:current localhost/portfolio-site:previous"
-          podman save --format oci-archive "$IMAGE@$DIGEST" | run_ssh "$sp load -q"
+          podman save --format oci-archive "$image_id" | run_ssh "$sp load -q"
           run_ssh "$sp tag $image_id localhost/portfolio-site:current"
           landed=$(run_ssh "$sp image inspect --format '{{.Id}}' localhost/portfolio-site:current")
           echo "pushed image id: $image_id"
@@ -287,7 +291,7 @@ jobs:
           echo "deploy verified: /readyz returned 200"
           # Drop images that lost their last tag in the :previous rotation.
           uid=$(run_ssh id -u site)
-          run_ssh "runuser -u site -- env XDG_RUNTIME_DIR=/run/user/$uid podman image prune -f"
+          run_ssh "runuser -u site -- env -C / -u DBUS_SESSION_BUS_ADDRESS -u SSH_CLIENT -u SSH_CONNECTION XDG_RUNTIME_DIR=/run/user/$uid podman image prune -f"
 
       - name: Remove credentials
         if: always()
