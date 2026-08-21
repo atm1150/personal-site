@@ -75,6 +75,28 @@ async fn main() {
         ),
     }
 
+    // Same env family as HEALTH_ADDR: absent = no listener; present without
+    // PUBLIC_BASE_URL = loud startup failure (a redirect with no target).
+    let http_redirect = server::http_redirect::resolve(
+        std::env::var(server::http_redirect::HTTP_REDIRECT_ADDR_VAR)
+            .ok()
+            .as_deref(),
+        public_base_url.as_ref(),
+    )
+    .expect("HTTP_REDIRECT_ADDR should be a socket address, and needs PUBLIC_BASE_URL set");
+    match &http_redirect {
+        Some(redirect) => tracing::info!(
+            addr = %redirect.addr,
+            target = redirect.base.as_str(),
+            source = "env HTTP_REDIRECT_ADDR",
+            "http redirect listener enabled"
+        ),
+        None => tracing::info!(
+            source = "default (HTTP_REDIRECT_ADDR unset)",
+            "http redirect listener disabled"
+        ),
+    }
+
     let app = server::router(
         conf.leptos_options,
         Hsts::from(&tls_config.mode),
@@ -90,6 +112,7 @@ async fn main() {
             // The site socket is bound (connections queue from here on), so a
             // health 200 can no longer precede the site actually serving.
             spawn_health_listener(tls_config.health_addr).await;
+            spawn_redirect_listener(http_redirect).await;
             axum::serve(listener, app.into_make_service())
                 .with_graceful_shutdown(shutdown_signal())
                 .await
@@ -120,6 +143,7 @@ async fn main() {
             // error the expect below surfaces.
             if handle.listening().await.is_some() {
                 spawn_health_listener(tls_config.health_addr).await;
+                spawn_redirect_listener(http_redirect).await;
             }
             server
                 .await
@@ -146,6 +170,25 @@ async fn spawn_health_listener(health_addr: Option<std::net::SocketAddr>) {
         axum::serve(health_listener, server::health_app())
             .await
             .expect("health listener should serve");
+    });
+}
+
+/// Bind and spawn the plain-http redirect listener, if configured.
+///
+/// Same invariant as the health listener: started only after the site socket
+/// is bound, so a redirect never points at a target that is not yet serving.
+async fn spawn_redirect_listener(config: Option<server::http_redirect::HttpRedirect>) {
+    let Some(config) = config else {
+        return;
+    };
+    let listener = tokio::net::TcpListener::bind(&config.addr)
+        .await
+        .expect("redirect address should be bindable (HTTP_REDIRECT_ADDR)");
+    tracing::info!("http redirect listener on http://{}", config.addr);
+    tokio::spawn(async move {
+        axum::serve(listener, server::http_redirect::redirect_app(config.base))
+            .await
+            .expect("http redirect listener should serve");
     });
 }
 

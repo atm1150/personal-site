@@ -6,6 +6,7 @@
 //! the app's shape is defined once, here.
 
 pub mod config;
+pub mod http_redirect;
 pub mod internal_error;
 pub mod security;
 pub mod telemetry;

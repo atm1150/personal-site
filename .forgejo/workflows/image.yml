@@ -233,11 +233,14 @@ jobs:
           set -eu
           export DEBIAN_FRONTEND=noninteractive
           command -v podman >/dev/null || { apt-get -qq update && apt-get -qq install -y podman; }
+          command -v lego >/dev/null || { apt-get -qq update && apt-get -qq install -y lego; }
           id site >/dev/null 2>&1 || useradd --create-home --shell /usr/sbin/nologin site
           loginctl enable-linger site
           printf 'net.ipv4.ip_unprivileged_port_start=80\n' > /etc/sysctl.d/50-unprivileged-ports.conf
           sysctl -q -p /etc/sysctl.d/50-unprivileged-ports.conf
-          install -d -m 0750 /etc/portfolio /etc/portfolio/certs
+          # Group-site: the rootless runtime must traverse into the cert mount.
+          install -d -m 0750 -g site /etc/portfolio /etc/portfolio/certs
+          install -d -m 0700 /var/lib/portfolio-lego
           printf 'PasswordAuthentication no\n' > /etc/ssh/sshd_config.d/50-no-passwords.conf
           sshd -t && systemctl reload ssh
           install -d "/etc/containers/systemd/users/$(id -u site)"
@@ -246,6 +249,12 @@ jobs:
           run_ssh "cat > /etc/containers/systemd/users/$uid/portfolio-site.container" \
             < src/deploy/portfolio-site.container
           run_ssh "systemctl --user --machine=site@.host daemon-reload"
+          # Safe pre-credential: the units' ConditionPathExists skip cleanly.
+          for unit in portfolio-certs-renew.timer portfolio-certs-renew.service \
+                      portfolio-certs-install.service portfolio-certs-issue.service; do
+            run_ssh "cat > /etc/systemd/system/$unit" < "src/deploy/$unit"
+          done
+          run_ssh "systemctl daemon-reload && systemctl enable --now portfolio-certs-renew.timer"
 
       - name: Ship image to droplet
         env:

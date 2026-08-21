@@ -1,0 +1,16 @@
+[Unit]
+Description=Renew the site certificate (lego, DNS-01 via Porkbun)
+Wants=network-online.target
+After=network-online.target
+# Both conditions skip cleanly (not fail) until day-one setup has happened:
+# Condition* skips the unit when unmet (Assert* would mark it failed instead).
+# Once both paths exist the unit really runs, and only then can it fail.
+# The gate holds forever: if lego.env is ever lost later, renewals silently
+# stop; external cert-expiry monitoring is the backstop for that.
+ConditionPathExists=/etc/portfolio/lego.env
+ConditionPathExists=/var/lib/portfolio-lego/certificates/atmiller.org.crt
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/portfolio/lego.env
+ExecStart=/usr/bin/lego --accept-tos --email ${LEGO_EMAIL} --dns porkbun --domains atmiller.org --domains www.atmiller.org --path /var/lib/portfolio-lego renew --days 30 --renew-hook "systemctl start portfolio-certs-install.service"

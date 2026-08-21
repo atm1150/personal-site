@@ -1,0 +1,8 @@
+[Unit]
+Description=Install the current certificate into the site's cert paths and restart the site
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/install -o root -g site -m 0644 /var/lib/portfolio-lego/certificates/atmiller.org.crt /etc/portfolio/certs/site.crt
+ExecStart=/usr/bin/install -o site -g site -m 0400 /var/lib/portfolio-lego/certificates/atmiller.org.key /etc/portfolio/certs/site.key
+ExecStart=/usr/bin/systemctl --user --machine=site@.host restart portfolio-site.service

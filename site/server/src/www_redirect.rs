@@ -68,16 +68,7 @@ pub async fn redirect_www(
         return next.run(request).await;
     }
 
-    // `path_and_query()` is `Some("*")` for the asterisk-form request-target
-    // (`OPTIONS * HTTP/1.1`) rather than a real path; falling through to "/"
-    // avoids composing a malformed `Location: https://atmiller.org*`.
-    let path_and_query = request
-        .uri()
-        .path_and_query()
-        .map(|pq| pq.as_str())
-        .filter(|pq| pq.starts_with('/'))
-        .unwrap_or("/");
-    let location = base.join(path_and_query);
+    let location = location_for(base, request.uri());
 
     let mut response = StatusCode::MOVED_PERMANENTLY.into_response();
     response.headers_mut().insert(
@@ -86,6 +77,18 @@ pub async fn redirect_www(
             .expect("a validated base URL and request URI compose into a valid header value"),
     );
     response
+}
+
+/// Compose a redirect target: the public base URL joined with the request's
+/// path and query. Falls back to "/" for the asterisk-form request-target
+/// (`OPTIONS * HTTP/1.1`), which would otherwise compose a malformed target.
+pub(crate) fn location_for(base: &PublicBaseUrl, uri: &axum::http::Uri) -> String {
+    let path_and_query = uri
+        .path_and_query()
+        .map(|pq| pq.as_str())
+        .filter(|pq| pq.starts_with('/'))
+        .unwrap_or("/");
+    base.join(path_and_query)
 }
 
 /// The request's host: the `Host` header first, falling back to the URI's

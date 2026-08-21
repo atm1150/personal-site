@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly renewal check for the site certificate
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 America/Los_Angeles
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
