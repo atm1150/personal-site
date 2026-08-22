@@ -233,7 +233,17 @@ jobs:
           set -eu
           export DEBIAN_FRONTEND=noninteractive
           command -v podman >/dev/null || { apt-get -qq update && apt-get -qq install -y podman; }
-          command -v lego >/dev/null || { apt-get -qq update && apt-get -qq install -y lego; }
+          # Pinned upstream lego: Debian's build omits the porkbun DNS provider.
+          lego_version=5.4.0
+          lego_sha256=d3adf89392d606ce84d485c1cc20832edd42ace6ff9ced9dd3670d9d8b8aca38
+          if ! /usr/local/bin/lego --version 2>/dev/null | grep -q "version $lego_version "; then
+            curl -sSL -o /tmp/lego.tgz "https://github.com/go-acme/lego/releases/download/v${lego_version}/lego_v${lego_version}_linux_amd64.tar.gz"
+            echo "$lego_sha256  /tmp/lego.tgz" | sha256sum -c -
+            tar -xzf /tmp/lego.tgz -C /tmp lego
+            install -m 0755 /tmp/lego /usr/local/bin/lego
+            rm -f /tmp/lego.tgz /tmp/lego
+          fi
+          apt-get -qq purge -y lego 2>/dev/null || true
           id site >/dev/null 2>&1 || useradd --create-home --shell /usr/sbin/nologin site
           loginctl enable-linger site
           printf 'net.ipv4.ip_unprivileged_port_start=80\n' > /etc/sysctl.d/50-unprivileged-ports.conf

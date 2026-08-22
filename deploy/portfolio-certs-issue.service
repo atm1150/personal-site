@@ -8,4 +8,4 @@ ConditionPathExists=!/var/lib/portfolio-lego/certificates/atmiller.org.crt
 [Service]
 Type=oneshot
 EnvironmentFile=/etc/portfolio/lego.env
-ExecStart=/usr/bin/lego --accept-tos --email ${LEGO_EMAIL} --dns porkbun --domains atmiller.org --domains www.atmiller.org --path /var/lib/portfolio-lego run --run-hook "systemctl start portfolio-certs-install.service"
+ExecStart=/usr/local/bin/lego run --accept-tos --email ${LEGO_EMAIL} --dns porkbun --domains atmiller.org --domains www.atmiller.org --path /var/lib/portfolio-lego --deploy-hook "systemctl start portfolio-certs-install.service"
