@@ -294,11 +294,16 @@ jobs:
           [ -n "$landed" ] && [ "$landed" = "$image_id" ]
 
       - name: Restart and verify
+        # --resolve pins the site's name to the droplet, so the check
+        # validates the real certificate without waiting on public DNS.
         run: |
           . "$RUNNER_TEMP/ssh.env"
           run_ssh "systemctl --user --machine=site@.host restart portfolio-site.service"
-          curl -fsS --retry 30 --retry-delay 2 --retry-all-errors -o /dev/null "http://$DEPLOY_HOST/readyz"
-          echo "deploy verified: /readyz returned 200"
+          curl -fsS --retry 30 --retry-delay 2 --retry-all-errors -o /dev/null \
+            --resolve "atmiller.org:443:$DEPLOY_HOST" "https://atmiller.org/readyz"
+          redirect=$(curl -fsS -o /dev/null -w '%{http_code} %{redirect_url}' "http://$DEPLOY_HOST/")
+          [ "$redirect" = "301 https://atmiller.org/" ]
+          echo "deploy verified: https /readyz returned 200, port 80 redirects"
           # Drop images that lost their last tag in the :previous rotation.
           uid=$(run_ssh id -u site)
           run_ssh "runuser -u site -- env -C / -u DBUS_SESSION_BUS_ADDRESS -u SSH_CLIENT -u SSH_CONNECTION XDG_RUNTIME_DIR=/run/user/$uid podman image prune -f"

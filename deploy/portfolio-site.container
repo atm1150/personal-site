@@ -2,10 +2,18 @@
 # /etc/containers/systemd/users/<uid of site>/.
 [Container]
 Image=localhost/portfolio-site:current
-PublishPort=80:8080
+PublishPort=443:8080
+PublishPort=80:8081
+Volume=/etc/portfolio/certs:/etc/portfolio/certs:ro
+# keep-id: the host cert owner maps to the image's nonroot uid, so the
+# container process can read the 0400 key.
+UserNS=keep-id:uid=65532,gid=65532
 Environment=LEPTOS_ENV=PROD
 Environment=PUBLIC_BASE_URL=https://atmiller.org
-Environment=SITE_TLS=off
+Environment=SITE_TLS=on
+Environment=TLS_CERT_PATH=/etc/portfolio/certs/site.crt
+Environment=TLS_KEY_PATH=/etc/portfolio/certs/site.key
+Environment=HTTP_REDIRECT_ADDR=0.0.0.0:8081
 
 [Service]
 Restart=always
