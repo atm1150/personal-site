@@ -105,10 +105,13 @@ pub fn App() -> impl IntoView {
 #[component]
 fn HomePage() -> impl IntoView {
     let meta = crate::meta::PageMeta {
-        title: crate::meta::MetaTitle::new("atmil — portfolio")
-            .expect("home title is a valid MetaTitle"),
+        title: crate::meta::MetaTitle::new(
+            "Andrew Miller - I rebuild legacy stacks into modern systems",
+        )
+        .expect("home title is a valid MetaTitle"),
         description: crate::meta::MetaDescription::new(
-            "Personal website for displaying a code portfolio and expressing my thoughts",
+            "Full stack developer specializing in backend systems. This site is my public \
+             code sample: built from scratch, self-hosted skills included, resume inside.",
         )
         .expect("home description is a valid MetaDescription"),
         image: None,
@@ -116,8 +119,41 @@ fn HomePage() -> impl IntoView {
     view! {
         <crate::meta::PageMetaTags meta/>
         <div class="prose">
-            <h1>"Portfolio"</h1>
-            <p><a href="/resume">"Résumé"</a></p>
+            <h1>"I rebuild legacy stacks into modern systems"</h1>
+            <img
+                src="/portrait.jpg"
+                alt="Andrew Miller, smiling in the woods"
+                class="portrait"
+                width="1080"
+                height="1080"
+            />
+            <p>
+                "I am a full stack coder who specializes in backend systems. I can turn \
+                an existing design or concept into working code, but a visual design from \
+                scratch is not my type of creativity."
+            </p>
+            <p>
+                "My professional coding experience has been with private companies, and \
+                that means my code is rarely visible to the general public. By creating \
+                this site I serve two purposes: I have an example of my capabilities that \
+                is built from scratch, with a sleek, minimal, and properly accessible UI; \
+                and I now have an outlet for my future thoughts."
+            </p>
+            <p>
+                "Outside of my professional experience I enjoy designing and running my \
+                own homelab. Writing deployable code is only one part of the software \
+                development life cycle, and it is easy to write subpar code when you have \
+                only ever seen your own subset of the process. A homelab is a whole system \
+                I architect myself, and running it gives me networking skills, live \
+                debugging experience, and cheaper services that keep my data under my own \
+                control."
+            </p>
+            <p>
+                "If you are a recruiter or hiring manager, feel free to check out my "
+                <a href="/resume">"resume page"</a>
+                ". Otherwise, keep an eye out for a future article section where I will \
+                express my thoughts in greater depth."
+            </p>
         </div>
     }
 }

@@ -198,9 +198,10 @@ mod tests {
     // compile-adjacent guarantee that a copy edit cannot ship an invalid value.
     #[test]
     fn home_page_literals_are_valid() {
-        MetaTitle::new("atmil — portfolio").unwrap();
+        MetaTitle::new("Andrew Miller - I rebuild legacy stacks into modern systems").unwrap();
         MetaDescription::new(
-            "Personal website for displaying a code portfolio and expressing my thoughts",
+            "Full stack developer specializing in backend systems. This site is my public \
+             code sample: built from scratch, self-hosted skills included, resume inside.",
         )
         .unwrap();
     }

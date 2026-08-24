@@ -188,9 +188,11 @@
   .site-footer p { margin: 0; }
   .site-footer .sep { margin: 0 0.5em; }
 
-  /* Long-form text: capped measure, looser leading, underlined links. */
+  /* Long-form text: capped measure, looser leading, underlined links.
+     Centered so leftover width splits evenly instead of pooling right. */
   .prose {
     max-width: var(--measure);
+    margin-inline: auto;
     font-size: var(--text-body);
     line-height: var(--line-body);
   }
@@ -227,6 +229,24 @@
      fallback synthesizes a 404); inherits the shell like any other route. */
   .not-found-page {
     max-width: var(--measure);
+  }
+
+  /* Home portrait floats in the intro; height follows the width so the
+     width/height attributes only reserve aspect ratio before load. */
+  .portrait {
+    float: right;
+    width: 180px;
+    height: auto;
+    margin: 0 0 var(--space-2) var(--space-2);
+    border-radius: var(--radius);
+  }
+  /* Below phone width the float would leave a sliver of text column. */
+  @media (max-width: 480px) {
+    .portrait {
+      float: none;
+      display: block;
+      margin: 0 auto var(--space-2);
+    }
   }
 }
 

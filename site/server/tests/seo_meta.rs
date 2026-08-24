@@ -14,13 +14,18 @@ const BASE: &str = "https://example.test";
 async fn home_head_carries_full_meta() {
     let html = body_string(get(test_router_with_base(Hsts::Off, Some(BASE)), "/").await).await;
 
-    assert!(html.contains("<title>atmil — portfolio</title>"), "{html}");
+    assert!(
+        html.contains("<title>Andrew Miller - I rebuild legacy stacks into modern systems</title>"),
+        "{html}"
+    );
     assert!(html.contains(
-        r#"<meta name="description" content="Personal website for displaying a code portfolio and expressing my thoughts""#
+        r#"<meta name="description" content="Full stack developer specializing in backend systems. This site is my public code sample: built from scratch, self-hosted skills included, resume inside.""#
     ));
-    assert!(html.contains(r#"<meta property="og:title" content="atmil — portfolio""#));
     assert!(html.contains(
-        r#"<meta property="og:description" content="Personal website for displaying a code portfolio and expressing my thoughts""#
+        r#"<meta property="og:title" content="Andrew Miller - I rebuild legacy stacks into modern systems""#
+    ));
+    assert!(html.contains(
+        r#"<meta property="og:description" content="Full stack developer specializing in backend systems. This site is my public code sample: built from scratch, self-hosted skills included, resume inside.""#
     ));
     assert!(html.contains(r#"<meta property="og:type" content="website""#));
     assert!(html.contains(r#"<meta property="og:url" content="https://example.test/""#));
@@ -52,7 +57,9 @@ async fn no_base_url_omits_absolute_tags_and_still_serves() {
     assert!(!html.contains("og:url"));
     assert!(!html.contains("canonical"));
     // The rest of the metadata does not depend on the base URL.
-    assert!(html.contains(r#"<meta property="og:title" content="atmil — portfolio""#));
+    assert!(html.contains(
+        r#"<meta property="og:title" content="Andrew Miller - I rebuild legacy stacks into modern systems""#
+    ));
 }
 
 /// leptos_meta renders every Meta component it sees - nothing dedupes them.
