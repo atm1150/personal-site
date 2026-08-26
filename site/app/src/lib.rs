@@ -66,6 +66,9 @@ pub fn App() -> impl IntoView {
     // Provides context that manages stylesheets, titles, meta tags, etc.
     provide_meta_context();
 
+    // Raised by the ErrorBoundary fallback, watched by SiteHeader.
+    provide_context(crate::errors::PageErrored(RwSignal::new(false)));
+
     // Emit the CSP header on every document response (home, resume, and the
     // fallback error page all render inside App). SSR only; no-op on the client.
     #[cfg(feature = "ssr")]
@@ -87,14 +90,17 @@ pub fn App() -> impl IntoView {
                 <SkipLink/>
                 <SiteHeader/>
                 <main id=MAIN_CONTENT_ID>
-                    <Routes fallback=|| {
-                        let mut errors = Errors::default();
-                        errors.insert_with_default_key(crate::errors::AppError::NotFound);
-                        view! { <error_template::ErrorTemplate errors/> }.into_view()
-                    }>
-                        <Route path=StaticSegment("") view=HomePage/>
-                        <Route path=StaticSegment("resume") view=ResumePage/>
-                    </Routes>
+                    // Kept inside <main> so an error leaves the header alive for recovery.
+                    <ErrorBoundary fallback=error_template::error_boundary_fallback>
+                        <Routes fallback=|| {
+                            let mut errors = Errors::default();
+                            errors.insert_with_default_key(crate::errors::AppError::NotFound);
+                            view! { <error_template::ErrorTemplate errors/> }.into_view()
+                        }>
+                            <Route path=StaticSegment("") view=HomePage/>
+                            <Route path=StaticSegment("resume") view=ResumePage/>
+                        </Routes>
+                    </ErrorBoundary>
                 </main>
                 <SiteFooter/>
             </Router>

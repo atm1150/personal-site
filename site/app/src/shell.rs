@@ -3,8 +3,9 @@
 //! Every route renders inside this shell, so the landmarks (`<header>`,
 //! `<nav>`, `<main>`, `<footer>`) exist exactly once per page.
 
+use crate::errors::PageErrored;
 use leptos::prelude::*;
-use leptos_router::components::A;
+use leptos_router::hooks::use_location;
 
 /// Anchor the skip link and the `<main>` landmark to the same id.
 pub const MAIN_CONTENT_ID: &str = "main-content";
@@ -22,23 +23,115 @@ pub fn SkipLink() -> impl IntoView {
     }
 }
 
+/// True when `pathname` is the page this `href` names (trailing slash ignored).
+pub(crate) fn is_current(pathname: &str, href: &str) -> bool {
+    pathname.trim_end_matches('/') == href.trim_end_matches('/')
+}
+
+/// target="_self" when this link points at the page showing the error: a
+/// router nav to the current page is a no-op.
+#[component]
+fn NavLink(href: &'static str, children: Children) -> impl IntoView {
+    let errored = use_context::<PageErrored>();
+    let pathname = use_location().pathname;
+    let here = move || is_current(&pathname.get(), href);
+    let full_load = move || (errored.is_some_and(|flag| flag.0.get()) && here()).then_some("_self");
+    view! {
+        <a href=href aria-current=move || here().then_some("page") target=full_load>
+            {children()}
+        </a>
+    }
+}
+
 /// Wordmark plus primary navigation.
 #[component]
 pub fn SiteHeader() -> impl IntoView {
+    let errored = use_context::<PageErrored>();
+    let pathname = use_location().pathname;
+    // Same full-load rule as NavLink, but no aria-current: the wordmark also
+    // points home, and only one element may claim the current page.
+    let wordmark_target = move || {
+        (errored.is_some_and(|flag| flag.0.get()) && is_current(&pathname.get(), "/"))
+            .then_some("_self")
+    };
     view! {
         <header class="site-header">
             <div class="shell-row">
-                <a href="/" class="wordmark">
+                <a href="/" class="wordmark" target=wordmark_target>
                     "Andrew Miller"
                 </a>
                 <nav class="site-nav" aria-label="Main">
-                    <A href="/" exact=true>
-                        "Home"
-                    </A>
-                    <A href="/resume">"Resume"</A>
+                    <NavLink href="/">"Home"</NavLink>
+                    <NavLink href="/resume">"Resume"</NavLink>
                 </nav>
             </div>
         </header>
+    }
+}
+
+#[cfg(all(test, feature = "ssr"))]
+mod tests {
+    use super::*;
+    use crate::errors::PageErrored;
+    use leptos_router::components::Router;
+    use leptos_router::location::RequestUrl;
+
+    fn render_header(errored: bool, path: &'static str) -> String {
+        let owner = Owner::new();
+        owner.with(move || {
+            provide_context(RequestUrl::new(path));
+            provide_context(PageErrored(RwSignal::new(errored)));
+            view! {
+                <Router>
+                    <SiteHeader/>
+                </Router>
+            }
+            .to_html()
+        })
+    }
+
+    #[test]
+    fn only_links_to_the_errored_page_become_full_loads() {
+        let home = render_header(true, "/");
+        assert_eq!(
+            home.matches(r#"target="_self""#).count(),
+            2,
+            "wordmark and nav Home should carry target=\"_self\"; got:\n{home}"
+        );
+        // Re-rendering the nav for the error state must keep aria-current.
+        assert!(home.contains(r#"aria-current="page""#), "got:\n{home}");
+
+        let resume = render_header(true, "/resume");
+        assert_eq!(
+            resume.matches(r#"target="_self""#).count(),
+            1,
+            "only nav Resume should carry target=\"_self\"; got:\n{resume}"
+        );
+    }
+
+    #[test]
+    fn header_links_stay_router_links_normally() {
+        let html = render_header(false, "/");
+
+        assert_eq!(
+            html.matches(r#"target="_self""#).count(),
+            0,
+            "no header link should carry a target outside the error state; got:\n{html}"
+        );
+        assert!(html.contains(r#"aria-current="page""#), "got:\n{html}");
+    }
+
+    #[test]
+    fn is_current_ignores_trailing_slashes() {
+        assert!(is_current("/resume/", "/resume"));
+        assert!(is_current("/resume", "/resume"));
+        assert!(is_current("/", "/"));
+    }
+
+    #[test]
+    fn is_current_rejects_other_routes() {
+        assert!(!is_current("/resume", "/"));
+        assert!(!is_current("/", "/resume"));
     }
 }
 
