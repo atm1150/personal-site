@@ -126,6 +126,10 @@ public static class LeptosHostingExtensions
                     {
                         ctx.EnvironmentVariables["TLS_CERT_PATH"] = ctx.CertificatePath;
                         ctx.EnvironmentVariables["TLS_KEY_PATH"] = ctx.KeyPath;
+                        // The dashboard's https OTLP endpoint serves this same dev
+                        // certificate, so the exporter trusts it by path.
+                        ctx.EnvironmentVariables["OTEL_EXPORTER_OTLP_CERTIFICATE"] =
+                            ctx.CertificatePath;
                         return Task.CompletedTask;
                     });
 #pragma warning restore ASPIRECERTIFICATES001

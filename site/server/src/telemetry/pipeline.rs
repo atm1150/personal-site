@@ -2,18 +2,22 @@
 //! layers, and installation. Consumes [`TelemetryConfig`] and produces the running
 //! pipeline plus its [`TelemetryGuard`].
 
+use std::path::Path;
 use std::time::Duration;
 
 use opentelemetry::KeyValue;
 use opentelemetry::trace::TracerProvider as _;
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
-use opentelemetry_otlp::{LogExporter, SpanExporter, WithExportConfig};
+use opentelemetry_otlp::tonic_types::transport::{Certificate, ClientTlsConfig};
+use opentelemetry_otlp::{LogExporter, SpanExporter, WithExportConfig, WithTonicConfig};
 use opentelemetry_sdk::Resource;
 use opentelemetry_sdk::logs::SdkLoggerProvider;
 use opentelemetry_sdk::trace::SdkTracerProvider;
 use opentelemetry_semantic_conventions::attribute::{
     DEPLOYMENT_ENVIRONMENT_NAME, SERVICE_INSTANCE_ID, SERVICE_VERSION,
 };
+use rustls_pki_types::CertificateDer;
+use rustls_pki_types::pem::PemObject as _;
 use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::registry::LookupSpan;
@@ -80,18 +84,18 @@ impl TelemetryConfig {
             TelemetryMode::Exporting(endpoint) => endpoint,
         };
 
-        // gRPC-over-https needs a TLS feature and thats not set up yet
-        if endpoint.is_tls() {
-            return Err(TelemetryError::Endpoint(format!(
-                "{} uses https but this build has no TLS support; use the plaintext http \
-                 OTLP endpoint (or enable an opentelemetry-otlp `tls-*` feature)",
-                endpoint.as_str()
-            )));
-        }
+        let tls_config = resolve_tls_trust(
+            endpoint.is_tls(),
+            self.trusted_ca.as_deref(),
+            cfg!(debug_assertions),
+        )?
+        .map(load_tls_config)
+        .transpose()?;
 
         let resource = self.build_resource();
-        let tracer_provider = build_tracer_provider(endpoint, resource.clone())?;
-        let logger_provider = build_logger_provider(endpoint, resource)?;
+        let tracer_provider =
+            build_tracer_provider(endpoint, resource.clone(), tls_config.clone())?;
+        let logger_provider = build_logger_provider(endpoint, resource, tls_config)?;
 
         let otel_layer = compose_otel_layer(&tracer_provider, &logger_provider);
 
@@ -127,14 +131,58 @@ impl TelemetryConfig {
     }
 }
 
+/// Resolve the trust source for the export transport: plaintext needs none; https
+/// needs the trusted-cert path, and only debug builds accept one (release has no
+/// custom-trust story yet).
+fn resolve_tls_trust(
+    endpoint_is_tls: bool,
+    trusted_ca: Option<&Path>,
+    debug_build: bool,
+) -> Result<Option<&Path>, TelemetryError> {
+    match (endpoint_is_tls, debug_build, trusted_ca) {
+        (false, _, _) => Ok(None),
+        (true, true, Some(path)) => Ok(Some(path)),
+        (true, true, None) => Err(TelemetryError::Tls(
+            "https OTLP endpoint requires OTEL_EXPORTER_OTLP_CERTIFICATE (path to the \
+             collector's trusted certificate)"
+                .to_owned(),
+        )),
+        (true, false, _) => Err(TelemetryError::Tls(
+            "https OTLP export is not supported in release builds; use a plaintext http \
+             endpoint"
+                .to_owned(),
+        )),
+    }
+}
+
+/// Build the exporter TLS config, validating up front that the file holds a PEM
+/// certificate — tonic accepts arbitrary bytes here and would fail only at the
+/// first export.
+fn load_tls_config(path: &Path) -> Result<ClientTlsConfig, TelemetryError> {
+    let pem = std::fs::read(path)
+        .map_err(|e| TelemetryError::Tls(format!("cannot read {}: {e}", path.display())))?;
+    CertificateDer::from_pem_slice(&pem).map_err(|e| {
+        TelemetryError::Tls(format!(
+            "{} is not a PEM certificate: {e:?}",
+            path.display()
+        ))
+    })?;
+    Ok(ClientTlsConfig::new().ca_certificate(Certificate::from_pem(pem)))
+}
+
 fn build_tracer_provider(
     endpoint: &OtlpEndpoint,
     resource: Resource,
+    tls_config: Option<ClientTlsConfig>,
 ) -> Result<SdkTracerProvider, TelemetryError> {
-    let exporter = SpanExporter::builder()
+    let mut builder = SpanExporter::builder()
         .with_tonic()
         .with_endpoint(endpoint.as_str())
-        .with_timeout(EXPORT_TIMEOUT)
+        .with_timeout(EXPORT_TIMEOUT);
+    if let Some(tls) = tls_config {
+        builder = builder.with_tls_config(tls);
+    }
+    let exporter = builder
         .build()
         .map_err(|e| TelemetryError::Exporter(e.to_string()))?;
 
@@ -147,11 +195,16 @@ fn build_tracer_provider(
 fn build_logger_provider(
     endpoint: &OtlpEndpoint,
     resource: Resource,
+    tls_config: Option<ClientTlsConfig>,
 ) -> Result<SdkLoggerProvider, TelemetryError> {
-    let exporter = LogExporter::builder()
+    let mut builder = LogExporter::builder()
         .with_tonic()
         .with_endpoint(endpoint.as_str())
-        .with_timeout(EXPORT_TIMEOUT)
+        .with_timeout(EXPORT_TIMEOUT);
+    if let Some(tls) = tls_config {
+        builder = builder.with_tls_config(tls);
+    }
+    let exporter = builder
         .build()
         .map_err(|e| TelemetryError::Exporter(e.to_string()))?;
 
@@ -192,6 +245,8 @@ fn otel_filter() -> Targets {
 
 #[cfg(test)]
 mod tests {
+    use std::path::{Path, PathBuf};
+
     use opentelemetry::Key;
     use opentelemetry_semantic_conventions::attribute::SERVICE_NAME;
     use tracing::Level;
@@ -204,6 +259,7 @@ mod tests {
             mode: TelemetryMode::Disabled,
             service_name: Some("portfolio-test".to_owned()),
             deployment_environment: None,
+            trusted_ca: None,
         };
         let (layer, _guard) = config
             .layers::<tracing_subscriber::Registry>()
@@ -212,24 +268,140 @@ mod tests {
     }
 
     #[test]
-    fn exporting_https_endpoint_is_rejected() {
-        // https needs a TLS feature + cert trust this build lacks; the pipeline must
-        // reject it up front (the natural seam for future TLS support) rather than let
-        // the tonic exporter fail obscurely.
+    fn resolve_tls_trust_plaintext_ignores_cert() {
+        let ca = PathBuf::from("/certs/dev.pem");
+        for debug_build in [true, false] {
+            for trusted_ca in [Some(ca.as_path()), None] {
+                let trust = resolve_tls_trust(false, trusted_ca, debug_build)
+                    .expect("plaintext endpoints never error");
+                assert!(trust.is_none(), "plaintext export never configures TLS");
+            }
+        }
+    }
+
+    #[test]
+    fn resolve_tls_trust_debug_https_with_cert_uses_it() {
+        let ca = PathBuf::from("/certs/dev.pem");
+        let trust = resolve_tls_trust(true, Some(ca.as_path()), true)
+            .expect("debug https with a trusted cert resolves");
+        assert_eq!(trust, Some(ca.as_path()));
+    }
+
+    #[test]
+    fn resolve_tls_trust_debug_https_without_cert_errors_naming_var() {
+        match resolve_tls_trust(true, None, true) {
+            Err(TelemetryError::Tls(msg)) => assert!(
+                msg.contains("OTEL_EXPORTER_OTLP_CERTIFICATE"),
+                "error must name the missing variable: {msg}"
+            ),
+            other => panic!("expected a Tls error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_tls_trust_release_https_errors() {
+        // Even with a cert configured: release builds have no custom-trust story yet.
+        match resolve_tls_trust(true, Some(Path::new("/certs/prod.pem")), false) {
+            Err(TelemetryError::Tls(msg)) => {
+                assert!(
+                    msg.contains("release"),
+                    "error must name the build mode: {msg}"
+                );
+            }
+            other => panic!("expected a Tls error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn exporting_https_without_cert_is_rejected() {
+        // Test binaries compile with debug_assertions, so this exercises the
+        // debug-build row of the trust matrix end to end through layers().
         let config = TelemetryConfig {
             mode: TelemetryMode::Exporting(
                 OtlpEndpoint::parse("https://collector:4317").expect("valid https endpoint"),
             ),
             service_name: None,
             deployment_environment: None,
+            trusted_ca: None,
         };
         // A match, not `expect_err`: the Ok payload (boxed layer + guard) is not
         // `Debug`, so `expect_err`'s `T: Debug` bound would not hold.
         match config.layers::<tracing_subscriber::Registry>() {
-            Err(TelemetryError::Endpoint(_)) => {}
-            Err(other) => panic!("expected an Endpoint error, got {other:?}"),
-            Ok(_) => panic!("https endpoint must be rejected without TLS support"),
+            Err(TelemetryError::Tls(_)) => {}
+            Err(other) => panic!("expected a Tls error, got {other:?}"),
+            Ok(_) => panic!("https endpoint without a trusted cert must be rejected"),
         }
+    }
+
+    // A tokio test because the tonic exporter build requires a live runtime (its
+    // hyper-util executor panics outside one), even though nothing is awaited.
+    #[tokio::test]
+    async fn exporting_https_with_cert_builds_layer() -> Result<(), Box<dyn std::error::Error>> {
+        let certified = rcgen::generate_simple_self_signed(vec!["localhost".to_owned()])?;
+        let dir = tempfile::tempdir()?;
+        let ca_path = dir.path().join("ca.pem");
+        std::fs::write(&ca_path, certified.cert.pem())?;
+
+        // Deliberately dead endpoint: the batch exporters connect lazily, so nothing
+        // must ever leak to a live collector from a test.
+        let config = TelemetryConfig {
+            mode: TelemetryMode::Exporting(
+                OtlpEndpoint::parse("https://127.0.0.1:1").expect("valid https endpoint"),
+            ),
+            service_name: Some("portfolio-test".to_owned()),
+            deployment_environment: None,
+            trusted_ca: Some(ca_path),
+        };
+        let (layer, _guard) = config
+            .layers::<tracing_subscriber::Registry>()
+            .expect("https endpoint with a trusted cert builds exporters");
+        assert!(layer.is_some(), "exporting mode emits the composed layer");
+        Ok(())
+    }
+
+    #[test]
+    fn exporting_https_with_missing_cert_file_errors_with_path() {
+        let config = TelemetryConfig {
+            mode: TelemetryMode::Exporting(
+                OtlpEndpoint::parse("https://collector:4317").expect("valid https endpoint"),
+            ),
+            service_name: None,
+            deployment_environment: None,
+            trusted_ca: Some(PathBuf::from("/nonexistent/dev-cert.pem")),
+        };
+        match config.layers::<tracing_subscriber::Registry>() {
+            Err(TelemetryError::Tls(msg)) => assert!(
+                msg.contains("/nonexistent/dev-cert.pem"),
+                "error must name the unreadable path: {msg}"
+            ),
+            Err(other) => panic!("expected a Tls error, got {other:?}"),
+            Ok(_) => panic!("a missing cert file must be rejected"),
+        }
+    }
+
+    #[test]
+    fn exporting_https_with_garbage_cert_file_errors_with_path() -> Result<(), std::io::Error> {
+        let dir = tempfile::tempdir()?;
+        let ca_path = dir.path().join("not-a-cert.pem");
+        std::fs::write(&ca_path, "this is not a certificate")?;
+
+        let config = TelemetryConfig {
+            mode: TelemetryMode::Exporting(
+                OtlpEndpoint::parse("https://collector:4317").expect("valid https endpoint"),
+            ),
+            service_name: None,
+            deployment_environment: None,
+            trusted_ca: Some(ca_path.clone()),
+        };
+        match config.layers::<tracing_subscriber::Registry>() {
+            Err(TelemetryError::Tls(msg)) => assert!(
+                msg.contains(ca_path.to_str().expect("utf-8 temp path")),
+                "error must name the invalid file: {msg}"
+            ),
+            Err(other) => panic!("expected a Tls error, got {other:?}"),
+            Ok(_) => panic!("a garbage cert file must be rejected"),
+        }
+        Ok(())
     }
 
     // A tokio test because the tonic exporter build requires a live runtime (its
@@ -245,6 +417,7 @@ mod tests {
             ),
             service_name: Some("portfolio-test".to_owned()),
             deployment_environment: None,
+            trusted_ca: None,
         };
         let (layer, _guard) = config
             .layers::<tracing_subscriber::Registry>()
@@ -336,6 +509,7 @@ mod tests {
             mode: TelemetryMode::Disabled,
             service_name: Some("portfolio-test".to_owned()),
             deployment_environment: Some("testing".to_owned()),
+            trusted_ca: None,
         };
         let resource = config.build_resource();
         assert_eq!(
@@ -365,6 +539,7 @@ mod tests {
             mode: TelemetryMode::Disabled,
             service_name: None,
             deployment_environment: None,
+            trusted_ca: None,
         };
         let resource = config.build_resource();
         assert_eq!(

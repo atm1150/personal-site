@@ -4,6 +4,8 @@
 //! before (or without) installing anything. The "how" (building providers and
 //! installing the subscriber) lives in [`super::pipeline`].
 
+use std::path::PathBuf;
+
 use super::error::TelemetryError;
 
 /// URL scheme prefixes shared by [`OtlpEndpoint::parse`] (which accepts them) and
@@ -13,9 +15,8 @@ const HTTPS_SCHEME: &str = "https://";
 
 /// A validated OTLP collector endpoint.
 ///
-/// Captures the http/https distinction ([`is_tls`](Self::is_tls)) because
-/// gRPC-over-https needs the otlp `tls` feature plus cert trust (the Aspire
-/// dev-cert trap), whereas plaintext http Just Works.
+/// Captures the http/https distinction ([`is_tls`](Self::is_tls)): https export
+/// needs a trusted certificate ([`TelemetryConfig::trusted_ca`]), plaintext does not.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OtlpEndpoint(String);
 
@@ -80,6 +81,8 @@ pub struct TelemetryConfig {
     pub mode: TelemetryMode,
     pub service_name: Option<String>,
     pub deployment_environment: Option<String>,
+    /// PEM certificate trusted to verify an https collector (`OTEL_EXPORTER_OTLP_CERTIFICATE`).
+    pub trusted_ca: Option<PathBuf>,
 }
 
 impl TelemetryConfig {
@@ -92,6 +95,8 @@ impl TelemetryConfig {
             mode,
             service_name: non_empty(std::env::var("OTEL_SERVICE_NAME").ok()),
             deployment_environment: non_empty(std::env::var("DEPLOYMENT_ENVIRONMENT").ok()),
+            trusted_ca: non_empty(std::env::var("OTEL_EXPORTER_OTLP_CERTIFICATE").ok())
+                .map(PathBuf::from),
         })
     }
 

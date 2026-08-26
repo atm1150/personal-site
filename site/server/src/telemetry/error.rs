@@ -9,6 +9,8 @@ use thiserror::Error;
 pub enum TelemetryError {
     #[error("invalid OTLP endpoint: {0}")]
     Endpoint(String),
+    #[error("OTLP TLS trust: {0}")]
+    Tls(String),
     #[error("failed to build OTLP exporter: {0}")]
     Exporter(String),
     #[error("failed to install tracing subscriber: {0}")]

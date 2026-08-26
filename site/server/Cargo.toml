@@ -27,12 +27,15 @@ thiserror.workspace = true
 # pair tracing-opentelemetry with the matching opentelemetry release (0.33 -> 0.32).
 opentelemetry = { version = "0.32", features = ["trace", "logs"] }
 opentelemetry_sdk = { version = "0.32", features = ["trace", "logs"] }
-opentelemetry-otlp = { version = "0.32", default-features = false, features = ["grpc-tonic", "trace", "logs"] }
+# tls-aws-lc: https OTLP export on the same crypto backend axum-server's rustls uses.
+opentelemetry-otlp = { version = "0.32", default-features = false, features = ["grpc-tonic", "trace", "logs", "tls-aws-lc"] }
 opentelemetry-appender-tracing = "0.32"
 # semconv_experimental: service.instance.id and deployment.environment.name are not
 # yet stable conventions, so their constants sit behind this feature.
 opentelemetry-semantic-conventions = { version = "0.32", features = ["semconv_experimental"] }
 tracing-opentelemetry = "0.33"
+# Validates the OTLP trusted-cert PEM at startup; already in-tree via axum-server.
+rustls-pki-types = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "registry"] }
 uuid = { version = "1", features = ["v4"] }
