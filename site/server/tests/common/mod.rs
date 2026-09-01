@@ -23,7 +23,12 @@ pub fn test_router(hsts: Hsts) -> Router {
 pub fn test_router_with_base(hsts: Hsts, base: Option<&str>) -> Router {
     let options = LeptosOptions::builder().output_name("portfolio").build();
     let base = base.map(|b| PublicBaseUrl::new(b).expect("test base URL should be valid"));
-    server::router(options, hsts, base)
+    server::router(
+        options,
+        hsts,
+        base,
+        server::limits::RequestLimits::disabled(),
+    )
 }
 
 /// Router whose site_root points at the source public/ dir, so the static-file
@@ -33,7 +38,12 @@ pub fn test_router_serving_public(hsts: Hsts) -> Router {
         .output_name("portfolio")
         .site_root("../public")
         .build();
-    server::router(options, hsts, None)
+    server::router(
+        options,
+        hsts,
+        None,
+        server::limits::RequestLimits::disabled(),
+    )
 }
 
 /// Send a GET through any router without binding a socket.

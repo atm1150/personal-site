@@ -97,10 +97,19 @@ async fn main() {
         ),
     }
 
+    let limits = server::limits::RequestLimits::production();
+    if let Some(governor) = &limits.governor {
+        server::limits::spawn_eviction(governor);
+    }
+    // Constructed before the TLS/plain-http match: both arms need connection
+    // bounds on their listener.
+    let connection_limits = server::limits::ConnectionLimits::production();
+
     let app = server::router(
         conf.leptos_options,
         Hsts::from(&tls_config.mode),
         public_base_url,
+        limits,
     );
 
     match tls_config.mode {
@@ -113,8 +122,11 @@ async fn main() {
             // health 200 can no longer precede the site actually serving.
             spawn_health_listener(tls_config.health_addr).await;
             spawn_redirect_listener(http_redirect).await;
-            axum::serve(listener, app.into_make_service())
-                .with_graceful_shutdown(shutdown_signal())
+            let mut server = axum_server::Server::from_listener(listener).handle(graceful_handle());
+            server::limits::apply_connection_bounds(&mut server, &connection_limits);
+            server
+                // with_connect_info: the rate limiter keys on the peer address.
+                .serve(app.into_make_service_with_connect_info::<std::net::SocketAddr>())
                 .await
                 .expect("server should run until shutdown");
         }
@@ -125,17 +137,18 @@ async fn main() {
             tracing::info!("listening on https://{addr}");
             // axum-server drives graceful shutdown through its Handle instead
             // of a future: relay the signal, allowing 10s for in-flight
-            // requests to drain (the http path waits unbounded; here a bound
-            // keeps a wedged TLS connection from stalling shutdown).
-            let handle = axum_server::Handle::new();
-            tokio::spawn({
+            // requests to drain (a wedged TLS connection can't stall shutdown
+            // indefinitely).
+            let handle = graceful_handle();
+            // Moved into the spawned task (not used again after this arm): a
+            // borrowed `&connection_limits` can't satisfy tokio::spawn's
+            // 'static bound, so the task owns its copy instead.
+            let server = tokio::spawn({
                 let handle = handle.clone();
                 async move {
-                    shutdown_signal().await;
-                    handle.graceful_shutdown(Some(std::time::Duration::from_secs(10)));
+                    tls::serve(app, addr, cert_path, key_path, handle, &connection_limits).await
                 }
             });
-            let server = tokio::spawn(tls::serve(app, addr, cert_path, key_path, handle.clone()));
             // The health listener starts only once `listening()` resolves with
             // an address: the cert has loaded and the site socket is bound, so
             // a health 200 always means the site is serving. On startup failure
@@ -185,11 +198,33 @@ async fn spawn_redirect_listener(config: Option<server::http_redirect::HttpRedir
         .await
         .expect("redirect address should be bindable (HTTP_REDIRECT_ADDR)");
     tracing::info!("http redirect listener on http://{}", config.addr);
+    // axum-server rather than axum::serve: this exposes the hyper builder that lets us apply connection bounds
+    let mut redirect =
+        axum_server::Server::<std::net::SocketAddr>::from_listener(listener).http1_only();
+    server::limits::apply_connection_bounds(
+        &mut redirect,
+        &server::limits::ConnectionLimits::production(),
+    );
     tokio::spawn(async move {
-        axum::serve(listener, server::http_redirect::redirect_app(config.base))
+        redirect
+            .serve(server::http_redirect::redirect_app(config.base).into_make_service())
             .await
             .expect("http redirect listener should serve");
     });
+}
+
+/// axum-server Handle wired to drain the listener on SIGTERM/SIGINT, capped at
+/// 10s. Both site-serving arms use this instead of repeating the signal task.
+fn graceful_handle() -> axum_server::Handle<std::net::SocketAddr> {
+    let handle = axum_server::Handle::new();
+    tokio::spawn({
+        let handle = handle.clone();
+        async move {
+            shutdown_signal().await;
+            handle.graceful_shutdown(Some(std::time::Duration::from_secs(10)));
+        }
+    });
+    handle
 }
 
 /// Resolve when the process receives SIGINT (Ctrl+C) or SIGTERM, so in-flight

@@ -47,13 +47,23 @@ async fn tls_listener_serves_readyz_over_https() -> Result<(), Box<dyn std::erro
     let cert = throwaway_cert()?;
 
     let handle = Handle::new();
-    let server_task = tokio::spawn(server::tls::serve(
-        test_router(Hsts::On),
-        "127.0.0.1:0".parse::<SocketAddr>()?,
-        cert.cert_path.clone(),
-        cert.key_path.clone(),
-        handle.clone(),
-    ));
+    let bind_addr: SocketAddr = "127.0.0.1:0".parse()?;
+    let server_task = tokio::spawn({
+        let handle = handle.clone();
+        let cert_path = cert.cert_path.clone();
+        let key_path = cert.key_path.clone();
+        async move {
+            server::tls::serve(
+                test_router(Hsts::On),
+                bind_addr,
+                cert_path,
+                key_path,
+                handle,
+                &server::limits::ConnectionLimits::production(),
+            )
+            .await
+        }
+    });
 
     // Timeout so a listener that never binds fails the test instead of hanging it.
     let addr = tokio::time::timeout(Duration::from_secs(5), handle.listening())
@@ -96,6 +106,7 @@ async fn tls_serve_fails_closed_on_malformed_pem() -> Result<(), Box<dyn std::er
         cert_path,
         key_path,
         Handle::new(),
+        &server::limits::ConnectionLimits::production(),
     )
     .await;
 
@@ -164,13 +175,23 @@ async fn hsts_reaches_the_client_over_a_real_tls_handshake()
     let cert = throwaway_cert()?;
 
     let handle = Handle::new();
-    let server_task = tokio::spawn(server::tls::serve(
-        test_router(Hsts::On),
-        "127.0.0.1:0".parse::<SocketAddr>()?,
-        cert.cert_path.clone(),
-        cert.key_path.clone(),
-        handle.clone(),
-    ));
+    let bind_addr: SocketAddr = "127.0.0.1:0".parse()?;
+    let server_task = tokio::spawn({
+        let handle = handle.clone();
+        let cert_path = cert.cert_path.clone();
+        let key_path = cert.key_path.clone();
+        async move {
+            server::tls::serve(
+                test_router(Hsts::On),
+                bind_addr,
+                cert_path,
+                key_path,
+                handle,
+                &server::limits::ConnectionLimits::production(),
+            )
+            .await
+        }
+    });
 
     let addr = tokio::time::timeout(Duration::from_secs(5), handle.listening())
         .await?

@@ -8,6 +8,7 @@
 pub mod config;
 pub mod http_redirect;
 pub mod internal_error;
+pub mod limits;
 pub mod security;
 pub mod telemetry;
 pub mod tls;
@@ -22,7 +23,9 @@ use axum::middleware::from_fn_with_state;
 use axum::routing::get;
 use leptos::prelude::*;
 use leptos_axum::{LeptosRoutes, generate_route_list};
+use limits::RequestLimits;
 use security::Hsts;
+use tower_governor::GovernorLayer;
 use www_redirect::{WwwRedirect, redirect_www};
 
 /// The readiness path this server serves. The Aspire AppHost health-checks the same
@@ -77,6 +80,7 @@ pub fn router(
     leptos_options: LeptosOptions,
     hsts: Hsts,
     public_base_url: Option<app::meta::PublicBaseUrl>,
+    limits: RequestLimits,
 ) -> Router {
     let routes = generate_route_list(App);
 
@@ -105,23 +109,49 @@ pub fn router(
         .fallback(leptos_axum::file_and_error_handler(shell))
         .with_state(leptos_options);
 
-    // Added before the layers below so the test route is wrapped by both -
+    // Added before the layers below so the test routes are wrapped by them -
     // a route added after `.layer(...)` would not be.
     #[cfg(feature = "test-util")]
     let traced = {
         async fn test_panic() {
             panic!("{}", TEST_PANIC_MARKER);
         }
-        traced.route("/__test/panic", get(test_panic))
+        // echo reads its body (no production route does), hang never returns:
+        // the observable surfaces for the body-limit and timeout tests.
+        async fn test_echo(body: axum::body::Bytes) -> String {
+            body.len().to_string()
+        }
+        async fn test_hang() {
+            std::future::pending::<()>().await;
+        }
+        traced
+            .route("/__test/panic", get(test_panic))
+            .route("/__test/echo", axum::routing::post(test_echo))
+            .route("/__test/hang", get(test_hang))
     };
 
     // catch_panic is innermost (added first) so a panicking handler still
-    // produces an ordinary response; trace is outermost (added last) so it
-    // observes that synthesized 500 and the responder's error event fires
-    // inside the request span.
+    // produces an ordinary response; body-limit and timeout sit above it so
+    // trace (outermost of this group, added last) observes their synthesized
+    // 413/408 too, and the responder's error event fires inside the request
+    // span.
     let traced = traced
         .layer(internal_error::catch_panic_layer())
+        .layer(tower_http::limit::RequestBodyLimitLayer::new(
+            limits::BODY_LIMIT_BYTES,
+        ))
+        .layer(tower_http::timeout::TimeoutLayer::with_status_code(
+            StatusCode::REQUEST_TIMEOUT,
+            limits.request_timeout,
+        ))
         .layer(telemetry::trace_layer());
+
+    // Outside the trace layer: a rejected flood must not buy a span per
+    // request. /readyz is merged below the layer, keeping probes exempt.
+    let traced = match limits.governor {
+        Some(config) => traced.layer(GovernorLayer::new(config)),
+        None => traced,
+    };
 
     // The www-redirect layer is innermost (added first), the constant
     // security headers outermost, so a 301 still carries the constant

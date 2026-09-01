@@ -183,6 +183,8 @@ fn resolve_health_addr(raw: Option<&str>) -> Result<Option<SocketAddr>, TlsError
 ///
 /// `handle` is the axum-server control handle: `main` uses it for graceful
 /// shutdown, tests use [`Handle::listening`] to learn the ephemeral bound port.
+/// `bounds` carries the connection-level bounds applied to this listener: the
+/// http1 header-read (slowloris) timeout and the http2 keep-alive bound.
 /// Resolves when the server has fully shut down.
 pub async fn serve(
     app: Router,
@@ -190,11 +192,14 @@ pub async fn serve(
     cert_path: impl AsRef<Path>,
     key_path: impl AsRef<Path>,
     handle: Handle<SocketAddr>,
+    bounds: &crate::limits::ConnectionLimits,
 ) -> std::io::Result<()> {
     let config = RustlsConfig::from_pem_file(cert_path, key_path).await?;
-    axum_server::bind_rustls(addr, config)
-        .handle(handle)
-        .serve(app.into_make_service())
+    let mut server = axum_server::bind_rustls(addr, config).handle(handle);
+    crate::limits::apply_connection_bounds(&mut server, bounds);
+    server
+        // with_connect_info: the rate limiter keys on the peer address.
+        .serve(app.into_make_service_with_connect_info::<SocketAddr>())
         .await
 }
 
