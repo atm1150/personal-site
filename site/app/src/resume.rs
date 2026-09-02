@@ -25,12 +25,16 @@ pub fn ResumePage() -> impl IntoView {
                         <h1>"Andrew Miller"</h1>
                         <p class="role">".NET Backend Software Engineer"</p>
                         <p class="contact">
+                            // The <wbr>s are this glued-together line's only wrap points.
                             "Seattle, WA"
                             <span class="sep">"·"</span>
+                            <wbr/>
                             "(812) 459-7361"
                             <span class="sep">"·"</span>
+                            <wbr/>
                             <a href="mailto:atmiller1150@gmail.com">"atmiller1150@gmail.com"</a>
                             <span class="sep">"·"</span>
+                            <wbr/>
                             <a href="https://www.linkedin.com/in/atmiller1150/">"linkedin.com/in/atmiller1150"</a>
                         </p>
                     </header>

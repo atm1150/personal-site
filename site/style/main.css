@@ -407,6 +407,16 @@
 .resume-page .edu-name { font-weight: 600; color: var(--navy); }
 .resume-page .edu-detail { font-weight: 400; color: #3c424d; }
 
+/* ---- Phone width (screen only; print keeps the canonical letter layout) ---- */
+@media screen and (max-width: 480px) {
+  .resume-page .resume-frame { padding: 8px; }
+  .resume-page .masthead { padding: 22px 20px 18px; }
+  .resume-page .resume-body { padding: 16px 20px 28px; }
+  .resume-page .skill-row { flex-direction: column; gap: 0; }
+  /* flex-basis would become height in the column direction */
+  .resume-page .skill-row dt { flex: none; }
+}
+
 /* ---- Print / PDF ---- */
 @media print {
   /* @page cannot be scoped to a selector; these only take effect when
