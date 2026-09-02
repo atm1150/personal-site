@@ -63,16 +63,14 @@ async fn skip_link_precedes_the_header_and_targets_main() {
     }
 }
 
-/// leptos_meta manages `<html>` during hydration and drops attributes set only
-/// in the SSR shell, so `lang` is re-asserted in `App`. Without it, axe reports
-/// html-has-lang and screen readers guess the pronunciation language.
 #[tokio::test]
-async fn html_element_declares_english() {
+async fn html_element_declares_english_exactly_once() {
     for path in EVERY_PAGE {
         let html = html_for(path).await;
-        assert!(
-            html.contains(r#"lang="en""#),
-            "{path} lost its lang: {html}"
+        assert_eq!(
+            html.matches(r#"lang="en""#).count(),
+            1,
+            "{path} should carry exactly one lang: {html}"
         );
     }
 }

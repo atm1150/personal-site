@@ -20,7 +20,8 @@ use singlestage::ThemeProvider;
 pub fn shell(options: LeptosOptions) -> impl IntoView {
     view! {
         <!DOCTYPE html>
-        <html lang="en">
+        // lang is on App's Html component; a second one here serializes as a duplicate.
+        <html>
             <head>
                 <meta charset="utf-8"/>
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -76,8 +77,8 @@ pub fn App() -> impl IntoView {
 
     view! {
         <Stylesheet id="leptos" href="/pkg/portfolio.css"/>
-        // leptos_meta manages <html> during hydration and drops the attribute
-        // set in the SSR shell, so lang is re-asserted here (axe: html-has-lang).
+        // leptos_meta manages <html> during hydration and drops attributes set
+        // only in the SSR shell, so lang lives here (axe: html-has-lang).
         <Html attr:lang="en"/>
 
         // ThemeProvider is load-bearing beyond theming: it injects singlestage's
