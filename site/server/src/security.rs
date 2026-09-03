@@ -43,12 +43,17 @@ impl From<&TlsMode> for Hsts {
     }
 }
 
-/// Five minutes. Deliberately short while the production TLS termination point is
-/// undecided: HSTS is client-side sticky and cannot be withdrawn from the server,
-/// and orchestrated dev serves TLS, so a developer's own browser is the first
-/// client to receive it. The ramp toward a year belongs to the deploy work, with
-/// `includeSubDomains` and `preload` still deliberately absent.
-const HSTS_VALUE: &str = "max-age=300";
+/// One year for release builds: HSTS is client-side sticky, and scanners fail
+/// anything under six months. Debug builds are minutes
+const fn hsts_value(debug_build: bool) -> &'static str {
+    if debug_build {
+        "max-age=300"
+    } else {
+        "max-age=31536000"
+    }
+}
+
+const HSTS_VALUE: &str = hsts_value(cfg!(debug_assertions));
 
 /// Disable every browser feature the site does not use, so a future injected
 /// script cannot reach for them either.
@@ -129,5 +134,23 @@ mod tests {
     #[test]
     fn disabled_tls_mode_converts_to_hsts_off() {
         assert_eq!(Hsts::from(&TlsMode::Disabled), Hsts::Off);
+    }
+
+    #[test]
+    fn debug_hsts_max_age_stays_under_an_hour() {
+        let seconds: u32 = hsts_value(true)
+            .strip_prefix("max-age=")
+            .expect("hsts value leads with max-age=")
+            .parse()
+            .expect("max-age is a bare number of seconds");
+        assert!(
+            seconds <= 3600,
+            "debug HSTS must stay short, got {seconds}s"
+        );
+    }
+
+    #[test]
+    fn release_builds_serve_a_one_year_hsts_max_age() {
+        assert_eq!(hsts_value(false), "max-age=31536000");
     }
 }
