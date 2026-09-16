@@ -47,22 +47,18 @@ async fn readyz() -> (StatusCode, &'static str) {
 #[cfg(feature = "test-util")]
 pub const TEST_PANIC_MARKER: &str = "deliberate-test-panic-detail-marker";
 
-/// Router for the auxiliary plain-http health listener: `/readyz` and nothing else.
-///
-/// Bound (by `main`, when `HEALTH_ADDR` is set) in addition to the site listener
-/// so orchestrator probes reach readiness without trusting the TLS certificate.
-/// Serving nothing else keeps the unauthenticated plain-http surface minimal.
-pub fn health_router() -> Router {
+/// Bare `/readyz` route fragment, shared by the main router and [`health_app`].
+pub fn readyz_router() -> Router {
     Router::new().route(READYZ_PATH, get(readyz))
 }
 
-/// The auxiliary health listener's complete app: [`health_router`] wrapped in
+/// The auxiliary health listener's complete app: [`readyz_router`] wrapped in
 /// the same constant security headers the main router carries, so the two
 /// `/readyz` surfaces respond identically however they are reached.
 pub fn health_app() -> Router {
     // Always Hsts::Off: this listener is plain http by design, and internal
     // plumbing that is never browsed.
-    health_router().layer(from_fn_with_state(
+    readyz_router().layer(from_fn_with_state(
         Hsts::Off,
         security::set_security_headers,
     ))
@@ -159,7 +155,7 @@ pub fn router(
     // /readyz. The per-request CSP is set separately during SSR render.
     // A redirected www request never reaches `traced`, so it produces no
     // spans.
-    health_router()
+    readyz_router()
         .merge(traced)
         .layer(from_fn_with_state(www_redirect, redirect_www))
         .layer(from_fn_with_state(hsts, security::set_security_headers))
