@@ -16,8 +16,8 @@ jobs:
     timeout-minutes: 60
     container:
       # Pinned so new stable releases (with new clippy lints) can't turn CI
-      # red on their own; bump deliberately alongside the local toolchain.
-      image: rust:1.96-bookworm
+      # red on their own; bump deliberately alongside site/rust-toolchain.toml.
+      image: rust:1.98.1-bookworm
     env:
       CARGO_TERM_COLOR: always
     steps:
@@ -34,7 +34,7 @@ jobs:
         run: |
           curl -L --proto '=https' --tlsv1.2 -sSf \
             https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
-          cargo binstall -y --locked cargo-leptos@0.3.6
+          cargo binstall -y --locked cargo-leptos@0.3.9
       - name: rustfmt
         working-directory: site
         run: cargo fmt --all --check
@@ -60,7 +60,7 @@ jobs:
     runs-on: ci
     timeout-minutes: 15
     container:
-      image: rust:1.96-bookworm
+      image: rust:1.98.1-bookworm
     env:
       CARGO_TERM_COLOR: always
     steps:

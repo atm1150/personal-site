@@ -1,0 +1,7 @@
+# Keep in lockstep with the rust:1.98.1-bookworm pins in
+# .forgejo/workflows/ci.yml (x2), .forgejo/workflows/image.yml, and
+# Containerfile, so local, CI, and the production build all compile
+# on the same compiler.
+[toolchain]
+channel = "1.98.1"
+targets = ["wasm32-unknown-unknown"]

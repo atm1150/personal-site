@@ -5,13 +5,13 @@
 #
 # The builder stage mirrors CI (.forgejo/workflows/ci.yml): bump the Rust image
 # pin and the cargo-leptos version here and there together.
-FROM docker.io/library/rust:1.96-bookworm AS builder
+FROM docker.io/library/rust:1.98.1-bookworm AS builder
 WORKDIR /app
 
 RUN rustup target add wasm32-unknown-unknown
 RUN curl -L --proto '=https' --tlsv1.2 -sSf \
         https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash \
-    && cargo binstall -y --locked cargo-leptos@0.3.6
+    && cargo binstall -y --locked cargo-leptos@0.3.9
 
 COPY site ./site
 WORKDIR /app/site

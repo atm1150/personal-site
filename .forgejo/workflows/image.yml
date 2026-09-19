@@ -133,12 +133,12 @@ jobs:
     container:
       # Same image the ci.yml jobs pin, so the runner already has it; the
       # scan itself needs only curl/tar. Bump alongside ci.yml + Containerfile.
-      image: rust:1.96-bookworm
+      image: rust:1.98.1-bookworm
     env:
       # Pinned + checksummed so a new trivy release can't change CI behavior
       # on its own; bump both together (checksums ship with each release).
-      TRIVY_VERSION: "0.73.0"
-      TRIVY_SHA256: "2edd39da482bb4e9831962487b68f68e3928ec3137794757f54d00383d79547b"
+      TRIVY_VERSION: "0.74.0"
+      TRIVY_SHA256: "2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a"
     steps:
       - name: Install trivy
         run: |
