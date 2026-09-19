@@ -8,8 +8,8 @@ mod common;
 use common::{body_string, get, test_router};
 use server::security::Hsts;
 
-/// Home, resume, and the 404 fallback all render inside the same shell.
-const EVERY_PAGE: [&str; 3] = ["/", "/resume", "/no-such-page"];
+/// Home, resume, the article, and the 404 fallback all render inside the same shell.
+const EVERY_PAGE: [&str; 4] = ["/", "/resume", "/how-its-built", "/no-such-page"];
 
 async fn html_for(path: &str) -> String {
     body_string(get(test_router(Hsts::Off), path).await).await
@@ -101,6 +101,13 @@ async fn theme_emits_light_and_dark_token_blocks() {
 async fn nav_marks_the_current_page_exactly_once() {
     let home = html_for("/").await;
     assert_eq!(home.matches(r#"aria-current="page""#).count(), 1, "{home}");
+
+    let article = html_for("/how-its-built").await;
+    assert_eq!(
+        article.matches(r#"aria-current="page""#).count(),
+        1,
+        "{article}"
+    );
 
     // An unmatched route is nobody's current page.
     let missing = html_for("/no-such-page").await;

@@ -194,7 +194,7 @@ pub fn PageMetaTags(meta: PageMeta) -> impl IntoView {
 mod tests {
     use super::*;
 
-    // The two live pages' literals must always construct; these tests are the
+    // The three live pages' literals must always construct; these tests are the
     // compile-adjacent guarantee that a copy edit cannot ship an invalid value.
     #[test]
     fn home_page_literals_are_valid() {
@@ -210,6 +210,16 @@ mod tests {
     fn resume_page_literals_are_valid() {
         MetaTitle::new("Andrew Miller — Software Engineer").unwrap();
         MetaDescription::new("Resume of Andrew Miller, software engineer in Seattle, WA.").unwrap();
+    }
+
+    #[test]
+    fn how_its_built_literals_are_valid() {
+        MetaTitle::new("How it's built - Andrew Miller").unwrap();
+        MetaDescription::new(
+            "This article is about how the site you are viewing works: the frontend \
+             technologies used and some specific design choices.",
+        )
+        .unwrap();
     }
 
     #[test]

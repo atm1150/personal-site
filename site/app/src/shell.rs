@@ -28,16 +28,23 @@ pub(crate) fn is_current(pathname: &str, href: &str) -> bool {
     pathname.trim_end_matches('/') == href.trim_end_matches('/')
 }
 
-/// target="_self" when this link points at the page showing the error: a
-/// router nav to the current page is a no-op.
-#[component]
-fn NavLink(href: &'static str, children: Children) -> impl IntoView {
+/// target="_self" when `href` is the page showing the error: a router nav to
+/// the current page is a no-op.
+fn full_load_target(href: &'static str) -> impl Fn() -> Option<&'static str> {
     let errored = use_context::<PageErrored>();
     let pathname = use_location().pathname;
+    move || {
+        (errored.is_some_and(|flag| flag.0.get()) && is_current(&pathname.get(), href))
+            .then_some("_self")
+    }
+}
+
+#[component]
+fn NavLink(href: &'static str, children: Children) -> impl IntoView {
+    let pathname = use_location().pathname;
     let here = move || is_current(&pathname.get(), href);
-    let full_load = move || (errored.is_some_and(|flag| flag.0.get()) && here()).then_some("_self");
     view! {
-        <a href=href aria-current=move || here().then_some("page") target=full_load>
+        <a href=href aria-current=move || here().then_some("page") target=full_load_target(href)>
             {children()}
         </a>
     }
@@ -46,23 +53,18 @@ fn NavLink(href: &'static str, children: Children) -> impl IntoView {
 /// Wordmark plus primary navigation.
 #[component]
 pub fn SiteHeader() -> impl IntoView {
-    let errored = use_context::<PageErrored>();
-    let pathname = use_location().pathname;
-    // Same full-load rule as NavLink, but no aria-current: the wordmark also
-    // points home, and only one element may claim the current page.
-    let wordmark_target = move || {
-        (errored.is_some_and(|flag| flag.0.get()) && is_current(&pathname.get(), "/"))
-            .then_some("_self")
-    };
     view! {
         <header class="site-header">
             <div class="shell-row">
-                <a href="/" class="wordmark" target=wordmark_target>
+                // No aria-current on the wordmark: it also points home, and only
+                // one element may claim the current page.
+                <a href="/" class="wordmark" target=full_load_target("/")>
                     "Andrew Miller"
                 </a>
                 <nav class="site-nav" aria-label="Main">
                     <NavLink href="/">"Home"</NavLink>
                     <NavLink href="/resume">"Resume"</NavLink>
+                    <NavLink href="/how-its-built">"How it's built"</NavLink>
                 </nav>
             </div>
         </header>
@@ -107,6 +109,52 @@ mod tests {
             1,
             "only nav Resume should carry target=\"_self\"; got:\n{resume}"
         );
+
+        let article = render_header(true, "/how-its-built");
+        assert_eq!(
+            article.matches(r#"target="_self""#).count(),
+            1,
+            "only nav How it's built should carry target=\"_self\"; got:\n{article}"
+        );
+    }
+
+    fn render_footer(errored: bool, path: &'static str) -> String {
+        let owner = Owner::new();
+        owner.with(move || {
+            provide_context(RequestUrl::new(path));
+            provide_context(PageErrored(RwSignal::new(errored)));
+            view! {
+                <Router>
+                    <SiteFooter/>
+                </Router>
+            }
+            .to_html()
+        })
+    }
+
+    #[test]
+    fn footer_article_link_becomes_a_full_load_only_when_erroring_there() {
+        let there = render_footer(true, "/how-its-built");
+        assert!(there.contains(r#"href="/how-its-built""#), "got:\n{there}");
+        assert_eq!(
+            there.matches(r#"target="_self""#).count(),
+            1,
+            "got:\n{there}"
+        );
+
+        let elsewhere = render_footer(true, "/");
+        assert_eq!(
+            elsewhere.matches(r#"target="_self""#).count(),
+            0,
+            "got:\n{elsewhere}"
+        );
+
+        let healthy = render_footer(false, "/how-its-built");
+        assert_eq!(
+            healthy.matches(r#"target="_self""#).count(),
+            0,
+            "got:\n{healthy}"
+        );
     }
 
     #[test]
@@ -149,7 +197,9 @@ pub fn SiteFooter() -> impl IntoView {
                     <span class="sep" aria-hidden="true">"·"</span>
                     <a href="https://www.linkedin.com/in/atmiller1150" rel="me">"LinkedIn"</a>
                     <span class="sep" aria-hidden="true">"·"</span>
-                    "Built with Leptos + Rust"
+                    <a href="/how-its-built" target=full_load_target("/how-its-built")>
+                        "Built with Leptos + Rust"
+                    </a>
                 </p>
             </div>
         </footer>

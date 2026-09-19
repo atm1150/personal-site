@@ -49,6 +49,30 @@ async fn resume_head_carries_full_meta() {
 }
 
 #[tokio::test]
+async fn article_head_carries_full_meta() {
+    let html = body_string(
+        get(
+            test_router_with_base(Hsts::Off, Some(BASE)),
+            "/how-its-built",
+        )
+        .await,
+    )
+    .await;
+
+    assert!(
+        html.contains("<title>How it's built - Andrew Miller</title>"),
+        "{html}"
+    );
+    assert!(html.contains(
+        r#"<meta name="description" content="This article is about how the site you are viewing works: the frontend technologies used and some specific design choices.""#
+    ));
+    assert!(
+        html.contains(r#"<meta property="og:url" content="https://example.test/how-its-built""#)
+    );
+    assert!(html.contains(r#"<link rel="canonical" href="https://example.test/how-its-built""#));
+}
+
+#[tokio::test]
 async fn no_base_url_omits_absolute_tags_and_still_serves() {
     let response = get(test_router_with_base(Hsts::Off, None), "/").await;
     assert_eq!(response.status(), 200);
@@ -77,7 +101,7 @@ async fn head_tags_appear_exactly_once() {
         r#"property="og:url""#,
         r#"rel="canonical""#,
     ];
-    for path in ["/", "/resume"] {
+    for path in ["/", "/resume", "/how-its-built"] {
         let html = body_string(get(test_router_with_base(Hsts::Off, Some(BASE)), path).await).await;
         for needle in needles {
             assert_eq!(

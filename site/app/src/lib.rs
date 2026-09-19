@@ -1,11 +1,13 @@
 pub mod csp;
 pub mod error_template;
 pub mod errors;
+pub mod how_its_built;
 pub mod meta;
 pub mod resume;
 pub mod shell;
 pub mod theme;
 
+use how_its_built::HowItsBuiltPage;
 use leptos::prelude::*;
 use leptos_meta::{Html, MetaTags, Stylesheet, provide_meta_context};
 use leptos_router::{
@@ -100,6 +102,7 @@ pub fn App() -> impl IntoView {
                         }>
                             <Route path=StaticSegment("") view=HomePage/>
                             <Route path=StaticSegment("resume") view=ResumePage/>
+                            <Route path=StaticSegment("how-its-built") view=HowItsBuiltPage/>
                         </Routes>
                     </ErrorBoundary>
                 </main>

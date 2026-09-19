@@ -51,9 +51,10 @@
     color: var(--site-heading);
   }
   h2 { font-size: var(--ratio-h2); font-weight: 600; color: var(--site-heading); }
-  h3 { font-size: var(--ratio-h3); font-weight: 600; }
+  h3 { font-size: var(--ratio-h3); font-weight: 600; color: var(--site-heading); }
   h4 { font-size: var(--ratio-h4); font-weight: 600; }
-  h2, h3, h4 { margin-top: var(--space-4); }
+  h2 { margin-top: var(--space-5); }
+  h3, h4 { margin-top: var(--space-3); margin-bottom: var(--space-1); }
 
   p { margin: 0 0 var(--space-2); }
 
@@ -209,6 +210,11 @@
   .prose ol { list-style: decimal; }
   .prose li { margin-bottom: 0.35em; }
   .prose li::marker { color: var(--site-link); }
+  .prose hr {
+    border: 0;
+    border-top: 1px solid var(--site-rule);
+    margin: var(--space-4) 0;
+  }
   .prose blockquote {
     margin: var(--space-2) 0;
     padding-left: var(--space-2);
@@ -389,7 +395,7 @@
 .resume-page .job:last-child, .resume-page .project:last-child { margin-bottom: 0; }
 
 .resume-page .job-head { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; }
-.resume-page .job-head h3, .resume-page .project h3 { margin: 0; font-size: 11pt; font-weight: 700; }
+.resume-page .job-head h3, .resume-page .project h3 { margin: 0; font-size: 11pt; font-weight: 700; color: inherit; }
 .resume-page .job-title { font-weight: 500; color: #3c424d; }
 .resume-page .job-sub { margin: 2px 0 6px; font-size: 9.8pt; font-style: italic; color: var(--muted); }
 
