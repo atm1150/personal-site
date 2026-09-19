@@ -45,7 +45,7 @@ The Aspire AppHost (`Portfolio.Orchestrator/`) applies this contract in run mode
 
 When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, the server exports traces and logs over OTLP/gRPC (the standard `OTEL_SERVICE_NAME` / `OTEL_RESOURCE_ATTRIBUTES` variables are honored); when it is absent, telemetry degrades to stdout logging only.
 
-The exporter is built without TLS support: the endpoint must be a plain `http://` URL, so the collector must run co-located with the server or be reachable over a trusted network. `https://` endpoints are rejected at startup until a `tls-*` feature of `opentelemetry-otlp` is enabled in `site/server/Cargo.toml`.
+Plain `http://` endpoints need no further configuration, so a collector co-located with the server or reachable over a trusted network works as is. `https://` endpoints are supported in debug builds only: set `OTEL_EXPORTER_OTLP_CERTIFICATE` to the PEM certificate the collector serves and the exporter uses it as its trust root (the Aspire AppHost sets it to its own dashboard certificate in run mode); an `https://` endpoint without that variable, or a file that is not a PEM certificate, is a startup error. Release builds reject `https://` endpoints at startup, as there is no trust configuration for a production collector yet.
 
 ## Dependency hygiene
 
