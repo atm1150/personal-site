@@ -37,6 +37,19 @@ async fn every_page_carries_the_shell_landmarks_exactly_once() {
     }
 }
 
+#[tokio::test]
+async fn every_page_footer_links_the_source_repository_exactly_once() {
+    for path in EVERY_PAGE {
+        let html = html_for(path).await;
+        assert_eq!(
+            html.matches(r#"href="https://github.com/atm1150/personal-site">Source</a>"#)
+                .count(),
+            1,
+            "{path}: {html}"
+        );
+    }
+}
+
 /// The skip link is only useful if it precedes the header in source order and
 /// points at the element the `<main>` landmark actually carries.
 #[tokio::test]

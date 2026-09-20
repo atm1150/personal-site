@@ -364,7 +364,7 @@
   color: var(--light);
 }
 .resume-page .contact a { color: var(--light); text-decoration: none; }
-.resume-page .contact .sep { color: #5e7197; margin: 0 6px; }
+.resume-page .contact .sep, .resume-page .job-sub .sep { color: #5e7197; margin: 0 6px; }
 
 /* ---- Body (was <main> on the standalone page) ---- */
 .resume-page .resume-body { padding: 20px 40px 34px; }
@@ -398,8 +398,12 @@
 .resume-page .job-head h3, .resume-page .project h3 { margin: 0; font-size: 11pt; font-weight: 700; color: inherit; }
 .resume-page .job-title { font-weight: 500; color: #3c424d; }
 .resume-page .job-sub { margin: 2px 0 6px; font-size: 9.8pt; font-style: italic; color: var(--muted); }
+@media screen {
+  .resume-page .job-sub a { color: var(--accent); text-decoration: underline; }
+}
 
 .resume-page .dates { font-size: 9.5pt; color: var(--muted); white-space: nowrap; }
+.resume-page .nowrap { white-space: nowrap; }
 
 .resume-page ul { margin: 5px 0 0; padding-left: 18px; list-style: disc; }
 .resume-page li { margin-bottom: 3px; }

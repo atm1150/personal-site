@@ -195,6 +195,8 @@ pub fn SiteFooter() -> impl IntoView {
                     // rel="me" marks these as the author's own profiles.
                     <a href="https://github.com/atm1150/" rel="me">"GitHub"</a>
                     <span class="sep" aria-hidden="true">"·"</span>
+                    <a href="https://github.com/atm1150/personal-site">"Source"</a>
+                    <span class="sep" aria-hidden="true">"·"</span>
                     <a href="https://www.linkedin.com/in/atmiller1150" rel="me">"LinkedIn"</a>
                     <span class="sep" aria-hidden="true">"·"</span>
                     <a href="/how-its-built" target=full_load_target("/how-its-built")>

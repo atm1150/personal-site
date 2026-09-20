@@ -23,7 +23,7 @@ pub fn ResumePage() -> impl IntoView {
                 <div class="page">
                     <header class="masthead">
                         <h1>"Andrew Miller"</h1>
-                        <p class="role">".NET Backend Software Engineer"</p>
+                        <p class="role">"Backend Software Engineer"</p>
                         <p class="contact">
                             // The <wbr>s are this glued-together line's only wrap points.
                             "Seattle, WA"
@@ -36,6 +36,9 @@ pub fn ResumePage() -> impl IntoView {
                             <span class="sep">"·"</span>
                             <wbr/>
                             <a href="https://www.linkedin.com/in/atmiller1150/">"linkedin.com/in/atmiller1150"</a>
+                            <span class="sep">"·"</span>
+                            <wbr/>
+                            <a href="https://atmiller.org">"atmiller.org"</a>
                         </p>
                     </header>
 
@@ -44,9 +47,10 @@ pub fn ResumePage() -> impl IntoView {
                             <h2>"Summary"</h2>
                             <p>
                                 "Backend software engineer with approximately 4.5 years of professional C#/.NET experience, focused on
-                                modernizing legacy systems. For the past 3.5 years, served as the primary backend developer for a
+                                modernizing legacy systems. For 3.5 years, served as the primary backend developer for a
                                 compliance-intensive mortgage document generation platform where precision is critical.
-                                Experiments with Rust outside of work."
+                                Outside of work, designs, builds, and runs atmiller.org end to end, a Rust web application on
+                                infrastructure defined in C# with Pulumi (see Projects)."
                             </p>
                         </section>
 
@@ -62,12 +66,16 @@ pub fn ResumePage() -> impl IntoView {
                                     <dd>"ASP.NET Core, .NET 8-10, Blazor (Server & WebAssembly), Entity Framework Core, Dapper, MediatR/CQRS, REST/GraphQL APIs, OpenAPI/Swagger, Postman, .NET Aspire"</dd>
                                 </div>
                                 <div class="skill-row">
+                                    <dt>"Rust & Web"</dt>
+                                    <dd>"Leptos (SSR + WebAssembly hydration), Axum, Tokio, Tower, rustls, tracing, cargo-deny"</dd>
+                                </div>
+                                <div class="skill-row">
                                     <dt>"Data & Messaging"</dt>
                                     <dd>"SQL Server/Azure SQL, Redis, RabbitMQ (MassTransit), event-driven architecture"</dd>
                                 </div>
                                 <div class="skill-row">
                                     <dt>"Cloud & DevOps"</dt>
-                                    <dd>"Azure, GitHub Actions, CI/CD, containers (Docker, Podman), Git"</dd>
+                                    <dd>"Azure, DigitalOcean, Pulumi, GitHub Actions, CI/CD, containers (Docker, Podman), OpenTelemetry, Git"</dd>
                                 </div>
                                 <div class="skill-row">
                                     <dt>"Testing"</dt>
@@ -82,6 +90,29 @@ pub fn ResumePage() -> impl IntoView {
                                     <dd>"Encompass (ICE Mortgage) LOS integration, MISMO/UCD 2 XML, TRID (Loan Estimate & Closing Disclosure), RESPA, compliant document generation (Aspose)"</dd>
                                 </div>
                             </dl>
+                        </section>
+
+                        <section id="projects">
+                            <h2>"Projects"</h2>
+                            <article class="project">
+                                <div class="job-head">
+                                    <h3>"Personal Site " <span class="job-title">"- Rust web application, built and operated end to end"</span></h3>
+                                    <span class="dates">"Jul 2026 - present"</span>
+                                </div>
+                                <p class="job-sub">
+                                    <a href="https://atmiller.org">"atmiller.org"</a>
+                                    <span class="sep">"·"</span>
+                                    <a href="https://github.com/atm1150/personal-site">"github.com/atm1150/personal-site"</a>
+                                </p>
+                                <ul>
+                                    <li>"Built a server-rendered Rust web application with Leptos and Axum, hydrated with WebAssembly."</li>
+                                    <li>"Hardened the server with a Content Security Policy and full security-header suite, per-client rate limiting, and request, body, and header-read limits."</li>
+                                    <li>"Terminated TLS in the server itself with rustls, with certificates issued and renewed automatically through " <span class="nowrap">"DNS-01"</span> "."</li>
+                                    <li>"Gated every pull request on formatting, lint, dependency audit, and tests; on merge, CI builds, scans, and publishes the container image and deploys it over SSH, with a tagged rollback workflow."</li>
+                                    <li>"Provisioned the host, reserved IP, and firewall as code with Pulumi in C#, with unit tests over the stack configuration."</li>
+                                    <li>"Instrumented the server with OpenTelemetry traces and logs, exported to a .NET Aspire orchestrator that runs the full stack locally."</li>
+                                </ul>
+                            </article>
                         </section>
 
                         <section id="experience">
